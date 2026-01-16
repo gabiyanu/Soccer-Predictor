@@ -57,7 +57,49 @@ cd soccer-predictor-statsbomb
 pip install -r requirements.txt
 ```
 
-## Quick Start
+## 🚀 Deploy to Render (Free Hosting)
+
+### Step-by-Step Instructions:
+
+**1. Create a GitHub Repository**
+```bash
+# Initialize git in the project folder
+git init
+git add .
+git commit -m "Initial commit"
+
+# Create a new repo on GitHub, then:
+git remote add origin https://github.com/YOUR_USERNAME/soccer-predictor.git
+git branch -M main
+git push -u origin main
+```
+
+**2. Deploy on Render**
+
+1. Go to [render.com](https://render.com) and sign up (free)
+2. Click **"New +"** → **"Web Service"**
+3. Connect your GitHub account
+4. Select your `soccer-predictor` repository
+5. Render will auto-detect settings, but verify:
+   - **Name:** `soccer-predictor` (or any name)
+   - **Environment:** `Python`
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn app:app --bind 0.0.0.0:$PORT`
+6. Select **Free** plan
+7. Click **"Create Web Service"**
+
+**3. Wait for Deployment**
+- Render will build and deploy your app (takes 2-5 minutes)
+- Once done, you'll get a URL like: `https://soccer-predictor.onrender.com`
+
+### ⚠️ Free Tier Notes:
+- App may "sleep" after 15 min of inactivity (first load takes ~30 sec to wake up)
+- 750 free hours/month
+- Perfect for personal projects!
+
+---
+
+## Quick Start (Local)
 
 ### 🌐 Web Interface (Recommended)
 

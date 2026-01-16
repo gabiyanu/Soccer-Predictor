@@ -102,7 +102,7 @@ def predict_match():
     competition_key = data.get('competition')
     home_team = data.get('home_team')
     away_team = data.get('away_team')
-    n_simulations = data.get('simulations', 10000)
+    n_simulations = min(data.get('simulations', 2500), 10000)  # Cap at 10k for memory
     
     if not all([competition_key, home_team, away_team]):
         return jsonify({'error': 'Missing required fields'}), 400
@@ -124,11 +124,11 @@ def predict_match():
     home_stats = team_stats[home_team]
     away_stats = team_stats[away_team]
     
-    # Run prediction
+    # Run prediction with memory-efficient settings
     predictor = MonteCarloPredictor(n_simulations=n_simulations)
     result = predictor.predict(home_stats, away_stats)
     
-    # Format response
+    # Format response (don't store raw results to save memory)
     prediction = {
         'home_team': home_team,
         'away_team': away_team,
@@ -155,6 +155,10 @@ def predict_match():
         'top_scores': dict(list(result.score_distribution.items())[:8]),
         'simulations': n_simulations
     }
+    
+    # Force garbage collection to free memory
+    import gc
+    gc.collect()
     
     return jsonify(prediction)
 
@@ -206,8 +210,9 @@ def get_rankings(competition_key):
 
 
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
     print("\n" + "=" * 50)
     print("  ⚽ Soccer Predictor Web Server")
     print("=" * 50)
-    print("\n  Open http://localhost:5000 in your browser\n")
-    app.run(debug=True, port=5000)
+    print(f"\n  Open http://localhost:{port} in your browser\n")
+    app.run(debug=True, host='0.0.0.0', port=port)

@@ -343,20 +343,23 @@ class MonteCarloPredictor:
         # Calculate expected goals
         home_xg, away_xg = self.calculate_expected_goals(home_stats, away_stats)
         
-        # Run simulations
+        # Run simulations - memory optimized, don't store all results
         results = {
             'home_wins': 0,
             'draws': 0,
             'away_wins': 0,
             'scores': {},
-            'total_goals': [],
             'home_clean_sheets': 0,
             'away_clean_sheets': 0,
             'btts': 0,
+            'over_1_5': 0,
+            'over_2_5': 0,
+            'over_3_5': 0,
         }
         
         for _ in range(n):
             home_goals, away_goals = self.simulate_match(home_xg, away_xg)
+            total_goals = home_goals + away_goals
             
             # Outcome
             if home_goals > away_goals:
@@ -366,18 +369,23 @@ class MonteCarloPredictor:
             else:
                 results['draws'] += 1
             
-            # Score tracking
+            # Score tracking (limit to save memory)
             score_key = f"{home_goals}-{away_goals}"
             results['scores'][score_key] = results['scores'].get(score_key, 0) + 1
             
-            # Markets
-            results['total_goals'].append(home_goals + away_goals)
+            # Markets - count directly instead of storing
             if away_goals == 0:
                 results['home_clean_sheets'] += 1
             if home_goals == 0:
                 results['away_clean_sheets'] += 1
             if home_goals > 0 and away_goals > 0:
                 results['btts'] += 1
+            if total_goals > 1.5:
+                results['over_1_5'] += 1
+            if total_goals > 2.5:
+                results['over_2_5'] += 1
+            if total_goals > 3.5:
+                results['over_3_5'] += 1
         
         # Calculate probabilities
         home_win_prob = results['home_wins'] / n
@@ -394,9 +402,6 @@ class MonteCarloPredictor:
         }
         
         most_likely = max(results['scores'].items(), key=lambda x: x[1])[0]
-        
-        # Market probabilities
-        total_goals = np.array(results['total_goals'])
         
         # Confidence intervals (Wilson score)
         home_win_ci = self._wilson_ci(results['home_wins'], n)
@@ -417,9 +422,9 @@ class MonteCarloPredictor:
             score_distribution=score_dist,
             most_likely_score=most_likely,
             btts_prob=results['btts'] / n,
-            over_1_5_prob=np.sum(total_goals > 1.5) / n,
-            over_2_5_prob=np.sum(total_goals > 2.5) / n,
-            over_3_5_prob=np.sum(total_goals > 3.5) / n,
+            over_1_5_prob=results['over_1_5'] / n,
+            over_2_5_prob=results['over_2_5'] / n,
+            over_3_5_prob=results['over_3_5'] / n,
             clean_sheet_home=results['home_clean_sheets'] / n,
             clean_sheet_away=results['away_clean_sheets'] / n,
             n_simulations=n,
