@@ -13,7 +13,7 @@ statsbombpy>=1.11.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 
-# Web API (optional, for serving predictions)
+# Web API (for web interface)
 flask>=2.3.0
 flask-cors>=4.0.0
 

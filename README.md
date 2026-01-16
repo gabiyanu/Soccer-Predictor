@@ -59,7 +59,29 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-### Command Line Interface
+### 🌐 Web Interface (Recommended)
+
+The easiest way to use the predictor:
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the web server
+python app.py
+```
+
+Then open **http://localhost:5000** in your browser!
+
+![Web Interface](https://via.placeholder.com/800x400?text=Beautiful+Web+Interface)
+
+Features:
+- Select any competition from dropdown
+- Choose home and away teams
+- Adjust simulation count
+- See beautiful visualizations of predictions
+
+### 💻 Command Line Interface
 
 ```bash
 # List available competitions
@@ -136,9 +158,13 @@ print(f"Expected Goals: {result.expected_home_goals:.2f} - {result.expected_away
 
 ```
 soccer-predictor-statsbomb/
-├── main.py                    # CLI interface
+├── app.py                     # Flask web server
+├── main.py                    # Interactive CLI
 ├── requirements.txt           # Dependencies
 ├── README.md                  # This file
+│
+├── web/
+│   └── index.html            # Web interface
 │
 ├── src/
 │   ├── __init__.py           # Main exports
@@ -162,7 +188,7 @@ soccer-predictor-statsbomb/
 │       └── visualization.py     # Plotting functions
 │
 ├── webapp/
-│   └── StatsBombPredictor.jsx   # React UI component
+│   └── StatsBombPredictor.jsx   # React UI component (alternative)
 │
 └── examples/
     └── basic_simulation.py      # Usage examples

@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚽ Soccer Match Predictor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #10b981;
+            --primary-dark: #059669;
+            --secondary: #3b82f6;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --dark: #1f2937;
+            --darker: #111827;
+            --light: #f3f4f6;
+            --gray: #6b7280;
+            --card-bg: #ffffff;
+            --shadow: 0 10px 40px rgba(0,0,0,0.1);
+            --shadow-lg: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: var(--dark);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            color: white;
+        }
+
+        header h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.8;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: var(--shadow);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--light);
+        }
+
+        .card-header .icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .card-header h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .card-header p {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--dark);
+        }
+
+        select, input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid var(--light);
+            border-radius: 12px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            background: white;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px center;
+            background-size: 20px;
+            padding-right: 45px;
+        }
+
+        /* Team Selection Grid */
+        .team-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .team-select {
+            text-align: center;
+        }
+
+        .team-select label {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--gray);
+            margin-bottom: 12px;
+        }
+
+        .vs-badge {
+            background: var(--darker);
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.2rem;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        /* Results Section */
+        .results {
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Match Result Header */
+        .match-header {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(135deg, var(--darker), var(--dark));
+            border-radius: 16px;
+            color: white;
+            margin-bottom: 25px;
+        }
+
+        .match-teams {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .team-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .team-elo {
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        .xg-display {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .xg-label {
+            font-size: 0.85rem;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        /* Probability Bars */
+        .prob-section {
+            margin-bottom: 30px;
+        }
+
+        .prob-bar-container {
+            display: flex;
+            height: 50px;
+            border-radius: 25px;
+            overflow: hidden;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .prob-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            transition: width 0.8s ease;
+            min-width: 60px;
+        }
+
+        .prob-bar.home { background: linear-gradient(135deg, #10b981, #059669); }
+        .prob-bar.draw { background: linear-gradient(135deg, #6b7280, #4b5563); }
+        .prob-bar.away { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+        .prob-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: var(--light);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--gray);
+            margin-top: 5px;
+        }
+
+        /* Score Distribution */
+        .score-dist {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .score-chip {
+            background: var(--light);
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+
+        .score-chip .score {
+            color: var(--dark);
+        }
+
+        .score-chip .prob {
+            color: var(--primary);
+            margin-left: 8px;
+        }
+
+        /* Prediction Badge */
+        .prediction-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--warning), #d97706);
+            color: white;
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-top: 15px;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--light);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        .spinner.show {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255,255,255,0.6);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2rem;
+            }
+
+            .team-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .vs-badge {
+                width: 40px;
+                height: 40px;
+                font-size: 1rem;
+            }
+
+            .match-teams {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .xg-display {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>⚽ Soccer Match Predictor</h1>
+        <p>Monte Carlo simulation powered by StatsBomb Open Data</p>
+        <span class="badge">🔓 No API Key Required</span>
+    </header>
+
+    <div class="container">
+        <!-- Competition Selection -->
+        <div class="card">
+            <div class="card-header">
+                <div class="icon">🏆</div>
+                <div>
+                    <h2>Select Competition</h2>
+                    <p>Choose from available free datasets</p>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="competition">Competition</label>
+                <select id="competition" onchange="loadTeams()">
+                    <option value="">-- Select a competition --</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Team Selection -->
+        <div class="card" id="team-card" style="display: none;">
+            <div class="card-header">
+                <div class="icon">👥</div>
+                <div>
+                    <h2>Select Teams</h2>
+                    <p>Choose home and away teams for prediction</p>
+                </div>
+            </div>
+            <div class="team-grid">
+                <div class="team-select">
+                    <label for="home-team">🏠 Home Team</label>
+                    <select id="home-team">
+                        <option value="">-- Select home team --</option>
+                    </select>
+                </div>
+                <div class="vs-badge">VS</div>
+                <div class="team-select">
+                    <label for="away-team">✈️ Away Team</label>
+                    <select id="away-team">
+                        <option value="">-- Select away team --</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 25px;">
+                <label for="simulations">Simulations (more = slower but more accurate)</label>
+                <select id="simulations">
+                    <option value="5000">5,000 (Fast)</option>
+                    <option value="10000" selected>10,000 (Recommended)</option>
+                    <option value="25000">25,000 (Accurate)</option>
+                    <option value="50000">50,000 (Very Accurate)</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="runPrediction()" id="predict-btn">
+                🎯 Predict Match Outcome
+            </button>
+        </div>
+
+        <!-- Loading -->
+        <div class="spinner" id="spinner"></div>
+
+        <!-- Results -->
+        <div class="results" id="results">
+            <!-- Match Header -->
+            <div class="card match-header">
+                <div class="match-teams">
+                    <div class="team-info">
+                        <div class="team-name" id="result-home-name">Home</div>
+                        <div class="team-elo" id="result-home-elo">Elo: 1500</div>
+                    </div>
+                    <div class="xg-display" id="result-xg">0.00 - 0.00</div>
+                    <div class="team-info">
+                        <div class="team-name" id="result-away-name">Away</div>
+                        <div class="team-elo" id="result-away-elo">Elo: 1500</div>
+                    </div>
+                </div>
+                <div class="xg-label">Expected Goals</div>
+                <div class="prediction-badge" id="prediction-badge">Prediction: Home Win</div>
+            </div>
+
+            <!-- Probabilities -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon">📊</div>
+                    <div>
+                        <h2>Match Outcome Probabilities</h2>
+                        <p>Based on Monte Carlo simulation</p>
+                    </div>
+                </div>
+                <div class="prob-section">
+                    <div class="prob-bar-container">
+                        <div class="prob-bar home" id="bar-home" style="width: 33%;">33%</div>
+                        <div class="prob-bar draw" id="bar-draw" style="width: 33%;">33%</div>
+                        <div class="prob-bar away" id="bar-away" style="width: 34%;">34%</div>
+                    </div>
+                    <div class="prob-labels">
+                        <span>🏠 Home Win</span>
+                        <span>🤝 Draw</span>
+                        <span>✈️ Away Win</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Markets -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon">💰</div>
+                    <div>
+                        <h2>Betting Markets</h2>
+                        <p>Popular market probabilities</p>
+                    </div>
+                </div>
+                <div class="stats-grid" id="markets-grid">
+                    <!-- Filled by JS -->
+                </div>
+            </div>
+
+            <!-- Score Distribution -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon">🎯</div>
+                    <div>
+                        <h2>Most Likely Scores</h2>
+                        <p>Top predicted scorelines</p>
+                    </div>
+                </div>
+                <div class="score-dist" id="score-dist">
+                    <!-- Filled by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Data provided by <a href="https://statsbomb.com" target="_blank">StatsBomb</a> Open Data</p>
+        <p style="margin-top: 10px;">Built with ❤️ using Monte Carlo simulation & Dixon-Coles model</p>
+    </footer>
+
+    <script>
+        const API_BASE = '';  // Same origin
+        let teamsData = [];
+
+        // Load competitions on page load
+        async function loadCompetitions() {
+            try {
+                const res = await fetch(`${API_BASE}/api/competitions`);
+                const data = await res.json();
+                
+                const select = document.getElementById('competition');
+                data.competitions.forEach(comp => {
+                    const option = document.createElement('option');
+                    option.value = comp.key;
+                    option.textContent = comp.name;
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Error loading competitions:', err);
+                alert('Error loading competitions. Please refresh the page.');
+            }
+        }
+
+        // Load teams for selected competition
+        async function loadTeams() {
+            const competition = document.getElementById('competition').value;
+            if (!competition) {
+                document.getElementById('team-card').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('spinner').classList.add('show');
+            document.getElementById('team-card').style.display = 'none';
+            document.getElementById('results').classList.remove('show');
+
+            try {
+                const res = await fetch(`${API_BASE}/api/teams/${competition}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                teamsData = data.teams;
+                populateTeamSelects(data.teams);
+                document.getElementById('team-card').style.display = 'block';
+            } catch (err) {
+                console.error('Error loading teams:', err);
+                alert('Error loading teams. Please try again.');
+            } finally {
+                document.getElementById('spinner').classList.remove('show');
+            }
+        }
+
+        function populateTeamSelects(teams) {
+            const homeSelect = document.getElementById('home-team');
+            const awaySelect = document.getElementById('away-team');
+            
+            homeSelect.innerHTML = '<option value="">-- Select home team --</option>';
+            awaySelect.innerHTML = '<option value="">-- Select away team --</option>';
+            
+            teams.forEach(team => {
+                const homeOpt = document.createElement('option');
+                homeOpt.value = team.name;
+                homeOpt.textContent = `${team.name} (Elo: ${team.elo})`;
+                homeSelect.appendChild(homeOpt);
+                
+                const awayOpt = document.createElement('option');
+                awayOpt.value = team.name;
+                awayOpt.textContent = `${team.name} (Elo: ${team.elo})`;
+                awaySelect.appendChild(awayOpt);
+            });
+        }
+
+        // Run prediction
+        async function runPrediction() {
+            const competition = document.getElementById('competition').value;
+            const homeTeam = document.getElementById('home-team').value;
+            const awayTeam = document.getElementById('away-team').value;
+            const simulations = parseInt(document.getElementById('simulations').value);
+
+            if (!homeTeam || !awayTeam) {
+                alert('Please select both teams');
+                return;
+            }
+
+            if (homeTeam === awayTeam) {
+                alert('Please select different teams');
+                return;
+            }
+
+            document.getElementById('predict-btn').disabled = true;
+            document.getElementById('spinner').classList.add('show');
+            document.getElementById('results').classList.remove('show');
+
+            try {
+                const res = await fetch(`${API_BASE}/api/predict`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        competition,
+                        home_team: homeTeam,
+                        away_team: awayTeam,
+                        simulations
+                    })
+                });
+
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                displayResults(data);
+            } catch (err) {
+                console.error('Error running prediction:', err);
+                alert('Error running prediction. Please try again.');
+            } finally {
+                document.getElementById('predict-btn').disabled = false;
+                document.getElementById('spinner').classList.remove('show');
+            }
+        }
+
+        function displayResults(data) {
+            // Match header
+            document.getElementById('result-home-name').textContent = data.home_team;
+            document.getElementById('result-away-name').textContent = data.away_team;
+            document.getElementById('result-home-elo').textContent = `Elo: ${data.home_elo}`;
+            document.getElementById('result-away-elo').textContent = `Elo: ${data.away_elo}`;
+            document.getElementById('result-xg').textContent = 
+                `${data.expected_goals.home} - ${data.expected_goals.away}`;
+
+            // Prediction badge
+            const probs = data.probabilities;
+            let prediction = 'Draw';
+            if (probs.home_win > probs.draw && probs.home_win > probs.away_win) {
+                prediction = `${data.home_team} Win`;
+            } else if (probs.away_win > probs.draw) {
+                prediction = `${data.away_team} Win`;
+            }
+            const confidence = Math.max(probs.home_win, probs.draw, probs.away_win);
+            document.getElementById('prediction-badge').textContent = 
+                `🎯 Prediction: ${prediction} (${confidence}%)`;
+
+            // Probability bars
+            document.getElementById('bar-home').style.width = `${probs.home_win}%`;
+            document.getElementById('bar-home').textContent = `${probs.home_win}%`;
+            document.getElementById('bar-draw').style.width = `${probs.draw}%`;
+            document.getElementById('bar-draw').textContent = `${probs.draw}%`;
+            document.getElementById('bar-away').style.width = `${probs.away_win}%`;
+            document.getElementById('bar-away').textContent = `${probs.away_win}%`;
+
+            // Markets
+            const marketsGrid = document.getElementById('markets-grid');
+            marketsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${data.markets.btts}%</div>
+                    <div class="stat-label">Both Teams Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.markets.over_1_5}%</div>
+                    <div class="stat-label">Over 1.5 Goals</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.markets.over_2_5}%</div>
+                    <div class="stat-label">Over 2.5 Goals</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.markets.over_3_5}%</div>
+                    <div class="stat-label">Over 3.5 Goals</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.markets.clean_sheet_home}%</div>
+                    <div class="stat-label">Home Clean Sheet</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${data.markets.clean_sheet_away}%</div>
+                    <div class="stat-label">Away Clean Sheet</div>
+                </div>
+            `;
+
+            // Score distribution
+            const scoreDist = document.getElementById('score-dist');
+            scoreDist.innerHTML = '';
+            Object.entries(data.top_scores).forEach(([score, prob]) => {
+                const chip = document.createElement('div');
+                chip.className = 'score-chip';
+                chip.innerHTML = `<span class="score">${score}</span><span class="prob">${(prob * 100).toFixed(1)}%</span>`;
+                scoreDist.appendChild(chip);
+            });
+
+            // Show results
+            document.getElementById('results').classList.add('show');
+            
+            // Scroll to results
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Initialize
+        loadCompetitions();
+    </script>
+</body>
+</html>
