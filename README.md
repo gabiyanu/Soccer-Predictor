@@ -7,7 +7,7 @@
 [![StatsBomb](https://img.shields.io/badge/Data-StatsBomb%20Open%20Data-red)](https://github.com/statsbomb/open-data)
 [![License](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-🔴 **[Live Demo](https://soccer-predictor-gabriel.onrender.com)** &nbsp;|&nbsp;
+🔴 **[Live Demo](https://soccer-prediction-490403.wn.r.appspot.com/)** &nbsp;|&nbsp;
 📓 **[Analysis Notebook](analysis/model_evaluation.ipynb)** &nbsp;|&nbsp;
 📊 **[Portfolio](https://www.datascienceportfol.io/gabrielaboyeji)**
 
