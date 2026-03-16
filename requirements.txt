@@ -1,24 +1,5 @@
-# Soccer Match Predictor - StatsBomb Edition
-# Install with: pip install -r requirements.txt
-
-# Core dependencies
-numpy>=1.24.0
-pandas>=2.0.0
-scipy>=1.10.0
-
-# StatsBomb data access
-statsbombpy>=1.11.0
-
-# Visualization (optional)
-matplotlib>=3.7.0
-seaborn>=0.12.0
-
-# Web API (for web interface)
 flask>=2.3.0
 flask-cors>=4.0.0
 gunicorn>=21.0.0
-
-# Development
-pytest>=7.3.0
-ipython>=8.0.0
-jupyter>=1.0.0
+numpy>=1.24.0
+scipy>=1.10.0

@@ -1,0 +1,13 @@
+runtime: python311
+
+instance_class: F1
+
+automatic_scaling:
+  min_instances: 0
+  max_instances: 1
+  target_cpu_utilization: 0.65
+
+entrypoint: gunicorn -b :$PORT app:app --timeout 120 --workers 1
+
+env_variables:
+  PYTHON_ENV: "production"
