@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 🔴 **[Live Demo](https://soccer-prediction-490403.wn.r.appspot.com/)** &nbsp;|&nbsp;
-📓 **[Analysis Notebook](analysis/model_evaluation.ipynb)** &nbsp;|&nbsp;
+📓 **[Analysis Notebook](https://github.com/gabiyanu/Soccer-Predictor/blob/main/model_evaluation.ipynb)** &nbsp;|&nbsp;
 📊 **[Portfolio](https://www.datascienceportfol.io/gabrielaboyeji)**
 
 ---
