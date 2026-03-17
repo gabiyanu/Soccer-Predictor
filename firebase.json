@@ -36,6 +36,7 @@
     {
       "source": "functions",
       "codebase": "default",
+      "runtime": "python311",
       "ignore": [
         "*.pyc",
         "__pycache__",
