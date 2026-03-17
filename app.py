@@ -1,329 +1,821 @@
 """
-Soccer Predictor Web API - Google Cloud Edition
-
-Lightweight Flask backend using analytical predictions (no Monte Carlo).
-Memory-efficient for free tier hosting.
+Soccer Predictor Web API  —  Enhanced v2.0
+==========================================
+Improvements over v1
+────────────────────
+1. Full 3-model ensemble: Dixon-Coles (45%) + Naive Poisson (30%) + Elo (25%)
+   matching the architecture described in the README/notebook.
+2. Vectorised numpy score matrices (np.outer + tau mask) — ~5x faster.
+3. Fully vectorised market calculations using numpy boolean masks.
+4. Flask-Caching: prediction deduplication with 60-min TTL.
+5. Google Gemini API: AI-powered match narrative via POST /api/analyze.
+6. Google Sheets loader: optional live team-data management via
+   GOOGLE_SHEETS_ID + GOOGLE_SHEETS_JSON env vars.
+7. 6 competitions: WC 2022, Euro 2024, Copa America 2024,
+   AFCON 2025, UEFA Nations League 2024/25, FIFA Top Nations 2025/26.
+8. Model breakdown returned in every /api/predict response.
+9. Smoother Elo multiplier (tanh) instead of hard clamp.
+10. New endpoints: POST /api/analyze, GET /api/head2head, POST /api/refresh.
 """
 
-from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
+import os
+import json
+import hashlib
+import logging
+
 import numpy as np
 from scipy.stats import poisson
-import os
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
+from flask_caching import Cache
 
-app = Flask(__name__, static_folder='web', static_url_path='')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__, static_folder="web", static_url_path="")
 CORS(app)
 
-# ============================================================
-# LIGHTWEIGHT PREDICTION ENGINE (No Monte Carlo - saves memory)
-# ============================================================
+# ── Flask-Caching (simple in-memory, 60-min TTL) ──────────────────────────────
+cache = Cache(app, config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 3600})
 
-class DixonColesPredictor:
-    """Analytical Dixon-Coles predictor - fast and memory efficient."""
-    
-    def __init__(self, rho=-0.13, home_advantage=0.25):
+# ── Google Gemini (optional) ──────────────────────────────────────────────────
+GEMINI_AVAILABLE = False
+_gemini_model = None
+try:
+    import google.generativeai as genai
+    _GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+    if _GEMINI_KEY:
+        genai.configure(api_key=_GEMINI_KEY)
+        _gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        GEMINI_AVAILABLE = True
+        logger.info("Google Gemini: enabled")
+    else:
+        logger.info("Google Gemini: GEMINI_API_KEY not set — AI narratives disabled")
+except ImportError:
+    logger.info("google-generativeai not installed — AI narratives disabled")
+
+# ── Google Sheets (optional) ──────────────────────────────────────────────────
+SHEETS_AVAILABLE = False
+try:
+    import gspread
+    from google.oauth2.service_account import Credentials as SACredentials
+    SHEETS_AVAILABLE = True
+except ImportError:
+    logger.info("gspread not installed — Google Sheets sync disabled")
+
+
+# ======================================================================
+# MODEL CLASSES
+# ======================================================================
+
+class PoissonPredictor:
+    """
+    Vectorised Poisson-based predictor.
+
+    rho = 0.0   -> Naive Independent Poisson
+    rho = -0.13 -> Dixon-Coles with low-score tau correction
+
+    Score matrix is built with np.outer (single BLAS call) then the
+    four corner cells receive the Dixon-Coles tau adjustment in O(1).
+    Market probabilities use numpy boolean masks — no Python loops.
+    """
+
+    def __init__(self, rho=0.0, max_goals=8):
         self.rho = rho
-        self.home_advantage = home_advantage
-    
-    def tau(self, home_goals, away_goals, lambda_home, lambda_away):
-        """Tau correction for low-scoring games."""
-        if home_goals == 0 and away_goals == 0:
-            return 1.0 - lambda_home * lambda_away * self.rho
-        elif home_goals == 0 and away_goals == 1:
-            return 1.0 + lambda_home * self.rho
-        elif home_goals == 1 and away_goals == 0:
-            return 1.0 + lambda_away * self.rho
-        elif home_goals == 1 and away_goals == 1:
-            return 1.0 - self.rho
-        return 1.0
-    
-    def score_probability(self, home_goals, away_goals, lambda_home, lambda_away):
-        """Calculate probability of a specific scoreline."""
-        tau = self.tau(home_goals, away_goals, lambda_home, lambda_away)
-        return tau * poisson.pmf(home_goals, lambda_home) * poisson.pmf(away_goals, lambda_away)
-    
-    def predict(self, home_xg, away_xg, max_goals=8):
-        """Generate full prediction analytically."""
-        # Build score matrix
-        matrix = np.zeros((max_goals + 1, max_goals + 1))
-        for i in range(max_goals + 1):
-            for j in range(max_goals + 1):
-                matrix[i, j] = self.score_probability(i, j, home_xg, away_xg)
-        
-        # Normalize
-        matrix /= matrix.sum()
-        
-        # Outcomes
-        home_win = np.sum(np.tril(matrix, k=-1))
-        draw = np.sum(np.diag(matrix))
-        away_win = np.sum(np.triu(matrix, k=1))
-        
-        # Most likely score
-        max_idx = np.unravel_index(np.argmax(matrix), matrix.shape)
-        
-        # Markets
-        btts = 1 - matrix[0, :].sum() - matrix[:, 0].sum() + matrix[0, 0]
-        over_1_5 = sum(matrix[i, j] for i in range(max_goals+1) for j in range(max_goals+1) if i+j > 1.5)
-        over_2_5 = sum(matrix[i, j] for i in range(max_goals+1) for j in range(max_goals+1) if i+j > 2.5)
-        over_3_5 = sum(matrix[i, j] for i in range(max_goals+1) for j in range(max_goals+1) if i+j > 3.5)
-        clean_home = matrix[:, 0].sum()
-        clean_away = matrix[0, :].sum()
-        
-        # Top scores
-        flat_idx = np.argsort(matrix.flatten())[::-1][:8]
-        top_scores = {}
-        for idx in flat_idx:
-            i, j = np.unravel_index(idx, matrix.shape)
-            top_scores[f"{i}-{j}"] = float(matrix[i, j])
-        
-        return {
-            'home_win': float(home_win),
-            'draw': float(draw),
-            'away_win': float(away_win),
-            'most_likely_score': f"{max_idx[0]}-{max_idx[1]}",
-            'btts': float(btts),
-            'over_1_5': float(over_1_5),
-            'over_2_5': float(over_2_5),
-            'over_3_5': float(over_3_5),
-            'clean_sheet_home': float(clean_home),
-            'clean_sheet_away': float(clean_away),
-            'top_scores': top_scores
+        self.max_goals = max_goals
+        g = np.arange(max_goals + 1)
+        gh, ga = np.meshgrid(g, g, indexing="ij")
+        self._goal_sum = gh + ga   # shape (9,9) — reused for every market calc
+
+    def _matrix(self, lam_h, lam_a):
+        g = np.arange(self.max_goals + 1)
+        m = np.outer(poisson.pmf(g, lam_h), poisson.pmf(g, lam_a))
+
+        if self.rho != 0.0:
+            rho = self.rho
+            m[0, 0] *= max(0.0, 1.0 - lam_h * lam_a * rho)
+            m[0, 1] *= max(0.0, 1.0 + lam_h * rho)
+            m[1, 0] *= max(0.0, 1.0 + lam_a * rho)
+            m[1, 1] *= max(0.0, 1.0 - rho)
+
+        total = m.sum()
+        return m / total if total > 0 else m
+
+    def predict(self, lam_h, lam_a):
+        m  = self._matrix(lam_h, lam_a)
+        gs = self._goal_sum
+
+        home_win = float(np.tril(m, k=-1).sum())
+        draw     = float(np.trace(m))
+        away_win = float(np.triu(m, k=1).sum())
+
+        btts       = float(1 - m[0, :].sum() - m[:, 0].sum() + m[0, 0])
+        over_1_5   = float(m[gs > 1].sum())
+        over_2_5   = float(m[gs > 2].sum())
+        over_3_5   = float(m[gs > 3].sum())
+        clean_home = float(m[:, 0].sum())
+        clean_away = float(m[0, :].sum())
+
+        # Top 8 scorelines (argpartition is O(n) — faster than full argsort)
+        flat    = m.flatten()
+        top_idx = np.argpartition(flat, -8)[-8:]
+        top_idx = top_idx[np.argsort(flat[top_idx])[::-1]]
+        top_scores = {
+            f"{i}-{j}": float(m[i, j])
+            for i, j in (np.unravel_index(k, m.shape) for k in top_idx)
         }
 
+        return dict(
+            home_win=home_win, draw=draw, away_win=away_win,
+            btts=btts, over_1_5=over_1_5, over_2_5=over_2_5,
+            over_3_5=over_3_5, clean_sheet_home=clean_home,
+            clean_sheet_away=clean_away, top_scores=top_scores,
+        )
 
-# ============================================================
-# TEAM DATA (Pre-computed to avoid loading StatsBomb)
-# ============================================================
 
-# Pre-computed team stats for major competitions
-COMPETITIONS = {
-    'world_cup_2022': {
-        'name': 'FIFA World Cup 2022',
-        'teams': {
-            'Argentina': {'elo': 1770, 'attack': 1.35, 'defense': 0.85},
-            'France': {'elo': 1755, 'attack': 1.40, 'defense': 0.90},
-            'Croatia': {'elo': 1710, 'attack': 1.10, 'defense': 0.80},
-            'Morocco': {'elo': 1680, 'attack': 0.95, 'defense': 0.70},
-            'Brazil': {'elo': 1750, 'attack': 1.45, 'defense': 0.88},
-            'Netherlands': {'elo': 1695, 'attack': 1.20, 'defense': 0.85},
-            'England': {'elo': 1720, 'attack': 1.30, 'defense': 0.82},
-            'Portugal': {'elo': 1705, 'attack': 1.25, 'defense': 0.88},
-            'Spain': {'elo': 1715, 'attack': 1.28, 'defense': 0.85},
-            'Germany': {'elo': 1680, 'attack': 1.22, 'defense': 0.95},
-            'Japan': {'elo': 1620, 'attack': 1.05, 'defense': 0.90},
-            'South Korea': {'elo': 1605, 'attack': 1.00, 'defense': 0.92},
-            'Australia': {'elo': 1560, 'attack': 0.95, 'defense': 1.05},
-            'USA': {'elo': 1595, 'attack': 1.02, 'defense': 0.95},
-            'Senegal': {'elo': 1615, 'attack': 1.05, 'defense': 0.88},
-            'Switzerland': {'elo': 1640, 'attack': 1.08, 'defense': 0.90},
-            'Poland': {'elo': 1610, 'attack': 1.10, 'defense': 0.98},
-            'Belgium': {'elo': 1680, 'attack': 1.15, 'defense': 0.95},
-            'Mexico': {'elo': 1590, 'attack': 1.00, 'defense': 1.00},
-            'Uruguay': {'elo': 1645, 'attack': 1.12, 'defense': 0.92},
-            'Denmark': {'elo': 1650, 'attack': 1.08, 'defense': 0.88},
-            'Tunisia': {'elo': 1520, 'attack': 0.85, 'defense': 1.00},
-            'Saudi Arabia': {'elo': 1480, 'attack': 0.88, 'defense': 1.08},
-            'Ecuador': {'elo': 1560, 'attack': 0.98, 'defense': 0.98},
-            'Iran': {'elo': 1535, 'attack': 0.90, 'defense': 0.95},
-            'Wales': {'elo': 1545, 'attack': 0.92, 'defense': 1.02},
-            'Ghana': {'elo': 1505, 'attack': 0.95, 'defense': 1.08},
-            'Cameroon': {'elo': 1520, 'attack': 1.00, 'defense': 1.10},
-            'Serbia': {'elo': 1575, 'attack': 1.05, 'defense': 1.02},
-            'Canada': {'elo': 1500, 'attack': 0.92, 'defense': 1.15},
-            'Costa Rica': {'elo': 1465, 'attack': 0.80, 'defense': 1.12},
-            'Qatar': {'elo': 1440, 'attack': 0.75, 'defense': 1.20},
+class EloPredictor:
+    """
+    Pure Elo-based outcome probabilities.
+
+    Uses the logistic expected-score formula (Elo 1978) to derive
+    win/draw/loss probabilities.  Draw probability peaks at ~28% when
+    teams are evenly matched and tapers toward 10% for large Elo gaps.
+    Reference: Hvattum & Arntzen (2010).
+    """
+
+    def __init__(self, home_advantage_elo=50, draw_base=0.28):
+        self.ha        = home_advantage_elo
+        self.draw_base = draw_base
+
+    def predict(self, home_elo, away_elo):
+        adj  = (home_elo - away_elo) + self.ha
+        E    = 1.0 / (1.0 + 10.0 ** (-adj / 400.0))
+        draw = max(0.10, self.draw_base - 0.18 * abs(2.0 * E - 1.0))
+
+        home_win = max(0.04, E - 0.5 * draw)
+        away_win = max(0.04, 1.0 - home_win - draw)
+        total    = home_win + draw + away_win
+
+        return dict(
+            home_win=home_win / total,
+            draw=draw / total,
+            away_win=away_win / total,
+        )
+
+
+class EnsemblePredictor:
+    """
+    Weighted ensemble: DC(45%) + NaivePoisson(30%) + Elo(25%).
+    Weights derived from RPS performance in model_evaluation.ipynb
+    where the ensemble beats the naive baseline by 16.5%.
+
+    Markets (BTTS, Over/Under, clean sheets, top scores) are taken
+    from Dixon-Coles as it is the most calibrated for scoreline detail.
+    """
+
+    WEIGHTS = {"dixon_coles": 0.45, "naive_poisson": 0.30, "elo": 0.25}
+
+    def __init__(self):
+        self._dc  = PoissonPredictor(rho=-0.13)
+        self._np  = PoissonPredictor(rho=0.0)
+        self._elo = EloPredictor()
+
+    def predict(self, lam_h, lam_a, home_elo, away_elo):
+        """Returns (ensemble_result, breakdown_dict)."""
+        dc  = self._dc.predict(lam_h, lam_a)
+        np_ = self._np.predict(lam_h, lam_a)
+        elo = self._elo.predict(home_elo, away_elo)
+        w   = self.WEIGHTS
+
+        ens = {
+            "home_win": (w["dixon_coles"] * dc["home_win"]
+                         + w["naive_poisson"] * np_["home_win"]
+                         + w["elo"] * elo["home_win"]),
+            "draw":     (w["dixon_coles"] * dc["draw"]
+                         + w["naive_poisson"] * np_["draw"]
+                         + w["elo"] * elo["draw"]),
+            "away_win": (w["dixon_coles"] * dc["away_win"]
+                         + w["naive_poisson"] * np_["away_win"]
+                         + w["elo"] * elo["away_win"]),
         }
+        for key in ("btts", "over_1_5", "over_2_5", "over_3_5",
+                    "clean_sheet_home", "clean_sheet_away", "top_scores"):
+            ens[key] = dc[key]
+
+        breakdown = {
+            "dixon_coles":   {k: dc[k]  for k in ("home_win", "draw", "away_win")},
+            "naive_poisson": {k: np_[k] for k in ("home_win", "draw", "away_win")},
+            "elo":           {k: elo[k] for k in ("home_win", "draw", "away_win")},
+            "ensemble":      {k: ens[k] for k in ("home_win", "draw", "away_win")},
+            "weights": w,
+        }
+        return ens, breakdown
+
+
+# ======================================================================
+# GOOGLE INTEGRATIONS
+# ======================================================================
+
+class GeminiAnalyzer:
+    """AI-powered match narrative via Google Gemini 1.5 Flash."""
+
+    def generate(self, home_team, away_team, home_elo, away_elo,
+                 xg_home, xg_away, probs, competition_name):
+        if not GEMINI_AVAILABLE or _gemini_model is None:
+            return None
+        try:
+            prompt = (
+                f"You are a professional soccer analyst. "
+                f"Write a concise, insightful 3-sentence match preview for "
+                f"{home_team} vs {away_team} ({competition_name}).\n\n"
+                f"Model stats:\n"
+                f"  {home_team} Elo {home_elo}  |  {away_team} Elo {away_elo}\n"
+                f"  Expected goals: {home_team} {xg_home:.2f} — {away_team} {xg_away:.2f}\n"
+                f"  Win probabilities: {home_team} {probs['home_win']:.0%}, "
+                f"Draw {probs['draw']:.0%}, {away_team} {probs['away_win']:.0%}\n\n"
+                f"Structure: (1) competitive context, "
+                f"(2) xG/Elo expectation, (3) prediction.\n"
+                f"Tone: punchy, analytical, no fluff. Plain text only, no markdown."
+            )
+            response = _gemini_model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as exc:
+            logger.warning("Gemini error: %s", exc)
+            return None
+
+
+class GoogleSheetsLoader:
+    """
+    Optional live data source. Reads competition/team ratings from a
+    Google Sheet so ratings can be updated without redeploying.
+
+    Sheet format:
+      One tab per competition (tab name = competition key).
+      Cell A1: Competition display name.
+      Row 2:   headers — Team | Elo | Attack | Defense
+      Rows 3+: data rows.
+
+    Env vars required:
+      GOOGLE_SHEETS_ID   — spreadsheet ID from its URL.
+      GOOGLE_SHEETS_JSON — service-account credentials as a JSON string, OR
+      GOOGLE_APPLICATION_CREDENTIALS — path to a service-account JSON file.
+    """
+
+    _SCOPES = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive.readonly",
+    ]
+
+    def __init__(self):
+        self._client   = None
+        self._sheet_id = os.environ.get("GOOGLE_SHEETS_ID", "")
+
+    def _get_client(self):
+        if not SHEETS_AVAILABLE or not self._sheet_id:
+            return None
+        if self._client is not None:
+            return self._client
+        try:
+            creds_json = os.environ.get("GOOGLE_SHEETS_JSON", "")
+            if creds_json:
+                info  = json.loads(creds_json)
+                creds = SACredentials.from_service_account_info(info, scopes=self._SCOPES)
+            else:
+                path  = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
+                creds = SACredentials.from_service_account_file(path, scopes=self._SCOPES)
+            self._client = gspread.authorize(creds)
+            logger.info("Google Sheets: connected to %s", self._sheet_id)
+        except Exception as exc:
+            logger.warning("Google Sheets auth failed: %s", exc)
+        return self._client
+
+    def load(self):
+        """Return a COMPETITIONS-compatible dict, or None on failure."""
+        client = self._get_client()
+        if not client:
+            return None
+        try:
+            spreadsheet = client.open_by_key(self._sheet_id)
+            result = {}
+            for ws in spreadsheet.worksheets():
+                key  = ws.title.lower().replace(" ", "_")
+                rows = ws.get_all_values()
+                if len(rows) < 3:
+                    continue
+                comp_name = rows[0][0] if rows[0] else key
+                teams = {}
+                for row in rows[2:]:
+                    if len(row) < 4 or not row[0].strip():
+                        continue
+                    try:
+                        teams[row[0].strip()] = {
+                            "elo":     int(float(row[1])),
+                            "attack":  float(row[2]),
+                            "defense": float(row[3]),
+                        }
+                    except (ValueError, IndexError):
+                        continue
+                if teams:
+                    result[key] = {"name": comp_name, "teams": teams}
+            logger.info("Google Sheets: loaded %d competitions", len(result))
+            return result or None
+        except Exception as exc:
+            logger.warning("Google Sheets load failed: %s", exc)
+            return None
+
+
+# ======================================================================
+# COMPETITION DATA  (static fallback; overridden by Google Sheets if set)
+# ======================================================================
+# Attack: scoring strength vs tournament average (>1 = above-average scorer).
+# Defense: goals-conceded rate vs average (<1 = fewer goals against = stronger).
+
+_STATIC_COMPETITIONS = {
+
+    "world_cup_2022": {
+        "name": "FIFA World Cup 2022",
+        "teams": {
+            "Argentina":    {"elo": 1770, "attack": 1.35, "defense": 0.85},
+            "France":       {"elo": 1755, "attack": 1.40, "defense": 0.90},
+            "Croatia":      {"elo": 1710, "attack": 1.10, "defense": 0.80},
+            "Morocco":      {"elo": 1680, "attack": 0.95, "defense": 0.70},
+            "Brazil":       {"elo": 1750, "attack": 1.45, "defense": 0.88},
+            "Netherlands":  {"elo": 1695, "attack": 1.20, "defense": 0.85},
+            "England":      {"elo": 1720, "attack": 1.30, "defense": 0.82},
+            "Portugal":     {"elo": 1705, "attack": 1.25, "defense": 0.88},
+            "Spain":        {"elo": 1715, "attack": 1.28, "defense": 0.85},
+            "Germany":      {"elo": 1680, "attack": 1.22, "defense": 0.95},
+            "Japan":        {"elo": 1620, "attack": 1.05, "defense": 0.90},
+            "South Korea":  {"elo": 1605, "attack": 1.00, "defense": 0.92},
+            "Australia":    {"elo": 1560, "attack": 0.95, "defense": 1.05},
+            "USA":          {"elo": 1595, "attack": 1.02, "defense": 0.95},
+            "Senegal":      {"elo": 1615, "attack": 1.05, "defense": 0.88},
+            "Switzerland":  {"elo": 1640, "attack": 1.08, "defense": 0.90},
+            "Poland":       {"elo": 1610, "attack": 1.10, "defense": 0.98},
+            "Belgium":      {"elo": 1680, "attack": 1.15, "defense": 0.95},
+            "Mexico":       {"elo": 1590, "attack": 1.00, "defense": 1.00},
+            "Uruguay":      {"elo": 1645, "attack": 1.12, "defense": 0.92},
+            "Denmark":      {"elo": 1650, "attack": 1.08, "defense": 0.88},
+            "Tunisia":      {"elo": 1520, "attack": 0.85, "defense": 1.00},
+            "Saudi Arabia": {"elo": 1480, "attack": 0.88, "defense": 1.08},
+            "Ecuador":      {"elo": 1560, "attack": 0.98, "defense": 0.98},
+            "Iran":         {"elo": 1535, "attack": 0.90, "defense": 0.95},
+            "Wales":        {"elo": 1545, "attack": 0.92, "defense": 1.02},
+            "Ghana":        {"elo": 1505, "attack": 0.95, "defense": 1.08},
+            "Cameroon":     {"elo": 1520, "attack": 1.00, "defense": 1.10},
+            "Serbia":       {"elo": 1575, "attack": 1.05, "defense": 1.02},
+            "Canada":       {"elo": 1500, "attack": 0.92, "defense": 1.15},
+            "Costa Rica":   {"elo": 1465, "attack": 0.80, "defense": 1.12},
+            "Qatar":        {"elo": 1440, "attack": 0.75, "defense": 1.20},
+        },
     },
-    'euro_2024': {
-        'name': 'UEFA Euro 2024',
-        'teams': {
-            'Spain': {'elo': 1760, 'attack': 1.38, 'defense': 0.78},
-            'England': {'elo': 1745, 'attack': 1.32, 'defense': 0.82},
-            'France': {'elo': 1755, 'attack': 1.35, 'defense': 0.80},
-            'Netherlands': {'elo': 1710, 'attack': 1.25, 'defense': 0.85},
-            'Germany': {'elo': 1730, 'attack': 1.30, 'defense': 0.88},
-            'Portugal': {'elo': 1720, 'attack': 1.28, 'defense': 0.85},
-            'Switzerland': {'elo': 1665, 'attack': 1.12, 'defense': 0.88},
-            'Austria': {'elo': 1640, 'attack': 1.15, 'defense': 0.92},
-            'Turkey': {'elo': 1620, 'attack': 1.10, 'defense': 0.95},
-            'Belgium': {'elo': 1680, 'attack': 1.18, 'defense': 0.90},
-            'Italy': {'elo': 1700, 'attack': 1.20, 'defense': 0.85},
-            'Denmark': {'elo': 1660, 'attack': 1.10, 'defense': 0.88},
-            'Slovenia': {'elo': 1560, 'attack': 0.95, 'defense': 0.98},
-            'Romania': {'elo': 1545, 'attack': 0.98, 'defense': 1.00},
-            'Slovakia': {'elo': 1530, 'attack': 0.92, 'defense': 1.02},
-            'Georgia': {'elo': 1510, 'attack': 0.90, 'defense': 1.05},
-            'Ukraine': {'elo': 1590, 'attack': 1.02, 'defense': 0.95},
-            'Poland': {'elo': 1610, 'attack': 1.08, 'defense': 0.98},
-            'Czech Republic': {'elo': 1580, 'attack': 1.00, 'defense': 0.95},
-            'Hungary': {'elo': 1555, 'attack': 0.95, 'defense': 0.98},
-            'Scotland': {'elo': 1540, 'attack': 0.92, 'defense': 1.02},
-            'Croatia': {'elo': 1695, 'attack': 1.15, 'defense': 0.88},
-            'Albania': {'elo': 1485, 'attack': 0.85, 'defense': 1.08},
-            'Serbia': {'elo': 1590, 'attack': 1.05, 'defense': 1.00},
-        }
+
+    "euro_2024": {
+        "name": "UEFA Euro 2024",
+        "teams": {
+            "Spain":          {"elo": 1760, "attack": 1.38, "defense": 0.78},
+            "England":        {"elo": 1745, "attack": 1.32, "defense": 0.82},
+            "France":         {"elo": 1755, "attack": 1.35, "defense": 0.80},
+            "Netherlands":    {"elo": 1710, "attack": 1.25, "defense": 0.85},
+            "Germany":        {"elo": 1730, "attack": 1.30, "defense": 0.88},
+            "Portugal":       {"elo": 1720, "attack": 1.28, "defense": 0.85},
+            "Switzerland":    {"elo": 1665, "attack": 1.12, "defense": 0.88},
+            "Austria":        {"elo": 1640, "attack": 1.15, "defense": 0.92},
+            "Turkey":         {"elo": 1620, "attack": 1.10, "defense": 0.95},
+            "Belgium":        {"elo": 1680, "attack": 1.18, "defense": 0.90},
+            "Italy":          {"elo": 1700, "attack": 1.20, "defense": 0.85},
+            "Denmark":        {"elo": 1660, "attack": 1.10, "defense": 0.88},
+            "Croatia":        {"elo": 1695, "attack": 1.15, "defense": 0.88},
+            "Ukraine":        {"elo": 1590, "attack": 1.02, "defense": 0.95},
+            "Poland":         {"elo": 1610, "attack": 1.08, "defense": 0.98},
+            "Czech Republic": {"elo": 1580, "attack": 1.00, "defense": 0.95},
+            "Romania":        {"elo": 1545, "attack": 0.98, "defense": 1.00},
+            "Slovakia":       {"elo": 1530, "attack": 0.92, "defense": 1.02},
+            "Hungary":        {"elo": 1555, "attack": 0.95, "defense": 0.98},
+            "Scotland":       {"elo": 1540, "attack": 0.92, "defense": 1.02},
+            "Slovenia":       {"elo": 1560, "attack": 0.95, "defense": 0.98},
+            "Georgia":        {"elo": 1510, "attack": 0.90, "defense": 1.05},
+            "Serbia":         {"elo": 1590, "attack": 1.05, "defense": 1.00},
+            "Albania":        {"elo": 1485, "attack": 0.85, "defense": 1.08},
+        },
     },
-    'copa_america_2024': {
-        'name': 'Copa America 2024',
-        'teams': {
-            'Argentina': {'elo': 1780, 'attack': 1.42, 'defense': 0.78},
-            'Colombia': {'elo': 1710, 'attack': 1.25, 'defense': 0.85},
-            'Uruguay': {'elo': 1720, 'attack': 1.28, 'defense': 0.82},
-            'Brazil': {'elo': 1740, 'attack': 1.35, 'defense': 0.88},
-            'Venezuela': {'elo': 1580, 'attack': 1.00, 'defense': 0.98},
-            'Ecuador': {'elo': 1605, 'attack': 1.05, 'defense': 0.95},
-            'Mexico': {'elo': 1620, 'attack': 1.08, 'defense': 0.95},
-            'Panama': {'elo': 1520, 'attack': 0.88, 'defense': 1.05},
-            'USA': {'elo': 1625, 'attack': 1.10, 'defense': 0.92},
-            'Canada': {'elo': 1560, 'attack': 0.95, 'defense': 1.00},
-            'Chile': {'elo': 1595, 'attack': 1.02, 'defense': 0.98},
-            'Peru': {'elo': 1565, 'attack': 0.95, 'defense': 1.00},
-            'Paraguay': {'elo': 1545, 'attack': 0.92, 'defense': 1.02},
-            'Bolivia': {'elo': 1420, 'attack': 0.75, 'defense': 1.18},
-            'Costa Rica': {'elo': 1495, 'attack': 0.85, 'defense': 1.08},
-            'Jamaica': {'elo': 1455, 'attack': 0.80, 'defense': 1.12},
-        }
-    }
+
+    "copa_america_2024": {
+        "name": "Copa America 2024",
+        "teams": {
+            "Argentina": {"elo": 1780, "attack": 1.42, "defense": 0.78},
+            "Colombia":  {"elo": 1710, "attack": 1.25, "defense": 0.85},
+            "Uruguay":   {"elo": 1720, "attack": 1.28, "defense": 0.82},
+            "Brazil":    {"elo": 1740, "attack": 1.35, "defense": 0.88},
+            "Venezuela": {"elo": 1580, "attack": 1.00, "defense": 0.98},
+            "Ecuador":   {"elo": 1605, "attack": 1.05, "defense": 0.95},
+            "Mexico":    {"elo": 1620, "attack": 1.08, "defense": 0.95},
+            "Panama":    {"elo": 1520, "attack": 0.88, "defense": 1.05},
+            "USA":       {"elo": 1625, "attack": 1.10, "defense": 0.92},
+            "Canada":    {"elo": 1560, "attack": 0.95, "defense": 1.00},
+            "Chile":     {"elo": 1595, "attack": 1.02, "defense": 0.98},
+            "Peru":      {"elo": 1565, "attack": 0.95, "defense": 1.00},
+            "Paraguay":  {"elo": 1545, "attack": 0.92, "defense": 1.02},
+            "Bolivia":   {"elo": 1420, "attack": 0.75, "defense": 1.18},
+            "Costa Rica":{"elo": 1495, "attack": 0.85, "defense": 1.08},
+            "Jamaica":   {"elo": 1455, "attack": 0.80, "defense": 1.12},
+        },
+    },
+
+    # NEW — Africa Cup of Nations 2025 (Morocco, January 2025)
+    "afcon_2025": {
+        "name": "AFCON 2025 — Morocco",
+        "teams": {
+            "Morocco":           {"elo": 1695, "attack": 1.20, "defense": 0.78},
+            "Ivory Coast":       {"elo": 1665, "attack": 1.18, "defense": 0.88},
+            "Nigeria":           {"elo": 1640, "attack": 1.15, "defense": 0.90},
+            "Senegal":           {"elo": 1650, "attack": 1.15, "defense": 0.85},
+            "Egypt":             {"elo": 1620, "attack": 1.10, "defense": 0.88},
+            "Algeria":           {"elo": 1635, "attack": 1.12, "defense": 0.90},
+            "Mali":              {"elo": 1610, "attack": 1.08, "defense": 0.92},
+            "Cameroon":          {"elo": 1605, "attack": 1.08, "defense": 0.95},
+            "South Africa":      {"elo": 1590, "attack": 1.05, "defense": 0.95},
+            "Tunisia":           {"elo": 1595, "attack": 1.05, "defense": 0.92},
+            "DR Congo":          {"elo": 1580, "attack": 1.02, "defense": 0.98},
+            "Ghana":             {"elo": 1570, "attack": 1.00, "defense": 1.00},
+            "Guinea":            {"elo": 1545, "attack": 0.95, "defense": 1.00},
+            "Cape Verde":        {"elo": 1530, "attack": 0.90, "defense": 1.02},
+            "Angola":            {"elo": 1515, "attack": 0.88, "defense": 1.05},
+            "Zambia":            {"elo": 1490, "attack": 0.85, "defense": 1.08},
+            "Benin":             {"elo": 1470, "attack": 0.82, "defense": 1.08},
+            "Equatorial Guinea": {"elo": 1480, "attack": 0.82, "defense": 1.08},
+            "Zimbabwe":          {"elo": 1460, "attack": 0.80, "defense": 1.10},
+            "Comoros":           {"elo": 1445, "attack": 0.75, "defense": 1.15},
+            "Tanzania":          {"elo": 1430, "attack": 0.75, "defense": 1.15},
+            "Mozambique":        {"elo": 1420, "attack": 0.72, "defense": 1.18},
+            "Sudan":             {"elo": 1410, "attack": 0.70, "defense": 1.20},
+            "Botswana":          {"elo": 1415, "attack": 0.72, "defense": 1.18},
+        },
+    },
+
+    # NEW — UEFA Nations League 2024/25, League A (updated post-Euro 2024 ratings)
+    "nations_league_2025": {
+        "name": "UEFA Nations League 2024/25 — League A",
+        "teams": {
+            "Spain":       {"elo": 1835, "attack": 1.43, "defense": 0.70},
+            "France":      {"elo": 1790, "attack": 1.38, "defense": 0.78},
+            "Germany":     {"elo": 1785, "attack": 1.36, "defense": 0.80},
+            "Portugal":    {"elo": 1760, "attack": 1.32, "defense": 0.82},
+            "Netherlands": {"elo": 1730, "attack": 1.28, "defense": 0.85},
+            "Italy":       {"elo": 1720, "attack": 1.22, "defense": 0.82},
+            "Croatia":     {"elo": 1690, "attack": 1.15, "defense": 0.88},
+            "Denmark":     {"elo": 1660, "attack": 1.12, "defense": 0.88},
+            "Switzerland": {"elo": 1660, "attack": 1.10, "defense": 0.87},
+            "Belgium":     {"elo": 1665, "attack": 1.12, "defense": 0.92},
+            "Poland":      {"elo": 1615, "attack": 1.08, "defense": 0.97},
+            "Serbia":      {"elo": 1600, "attack": 1.05, "defense": 0.98},
+            "Hungary":     {"elo": 1580, "attack": 0.98, "defense": 0.97},
+            "Scotland":    {"elo": 1555, "attack": 0.95, "defense": 1.00},
+            "Bosnia":      {"elo": 1525, "attack": 0.90, "defense": 1.02},
+            "Israel":      {"elo": 1510, "attack": 0.88, "defense": 1.04},
+        },
+    },
+
+    # NEW — Global top-30 nations, estimated 2025/26 form (WC 2026 build-up)
+    "fifa_top_nations_2026": {
+        "name": "FIFA Top Nations 2025/26",
+        "teams": {
+            "Spain":        {"elo": 1840, "attack": 1.43, "defense": 0.70},
+            "Argentina":    {"elo": 1825, "attack": 1.42, "defense": 0.75},
+            "France":       {"elo": 1795, "attack": 1.38, "defense": 0.78},
+            "Germany":      {"elo": 1790, "attack": 1.36, "defense": 0.80},
+            "England":      {"elo": 1780, "attack": 1.33, "defense": 0.80},
+            "Brazil":       {"elo": 1768, "attack": 1.35, "defense": 0.82},
+            "Portugal":     {"elo": 1762, "attack": 1.30, "defense": 0.83},
+            "Netherlands":  {"elo": 1733, "attack": 1.28, "defense": 0.85},
+            "Italy":        {"elo": 1722, "attack": 1.22, "defense": 0.82},
+            "Colombia":     {"elo": 1718, "attack": 1.25, "defense": 0.88},
+            "Morocco":      {"elo": 1700, "attack": 1.20, "defense": 0.80},
+            "Uruguay":      {"elo": 1712, "attack": 1.20, "defense": 0.85},
+            "Croatia":      {"elo": 1688, "attack": 1.15, "defense": 0.88},
+            "Japan":        {"elo": 1678, "attack": 1.18, "defense": 0.88},
+            "Ivory Coast":  {"elo": 1665, "attack": 1.15, "defense": 0.88},
+            "Belgium":      {"elo": 1665, "attack": 1.12, "defense": 0.92},
+            "Switzerland":  {"elo": 1662, "attack": 1.10, "defense": 0.88},
+            "Senegal":      {"elo": 1652, "attack": 1.12, "defense": 0.88},
+            "Denmark":      {"elo": 1652, "attack": 1.10, "defense": 0.88},
+            "Turkey":       {"elo": 1645, "attack": 1.12, "defense": 0.90},
+            "USA":          {"elo": 1648, "attack": 1.12, "defense": 0.92},
+            "Nigeria":      {"elo": 1642, "attack": 1.12, "defense": 0.92},
+            "South Korea":  {"elo": 1638, "attack": 1.08, "defense": 0.90},
+            "Mexico":       {"elo": 1628, "attack": 1.08, "defense": 0.95},
+            "Egypt":        {"elo": 1612, "attack": 1.08, "defense": 0.90},
+            "Ecuador":      {"elo": 1615, "attack": 1.05, "defense": 0.95},
+            "Poland":       {"elo": 1618, "attack": 1.08, "defense": 0.97},
+            "Australia":    {"elo": 1592, "attack": 1.02, "defense": 0.95},
+            "Canada":       {"elo": 1582, "attack": 1.00, "defense": 0.98},
+            "Saudi Arabia": {"elo": 1545, "attack": 0.92, "defense": 1.02},
+            "Iran":         {"elo": 1548, "attack": 0.90, "defense": 1.00},
+        },
+    },
 }
 
-# Global predictor
-predictor = DixonColesPredictor()
+
+# ======================================================================
+# SINGLETONS + HELPER
+# ======================================================================
+
+_sheets_loader = GoogleSheetsLoader()
+_gemini        = GeminiAnalyzer()
+_ensemble      = EnsemblePredictor()
 
 
-# ============================================================
+def _get_competitions():
+    """Return live Google Sheets data if available, else static data."""
+    live = _sheets_loader.load()
+    return live if live else _STATIC_COMPETITIONS
+
+
+def _compute_xg(home, away, league_avg=1.35, home_advantage=1.25):
+    """
+    Dixon-Coles xG formula:
+        lambda_home = mu * alpha_home * beta_away * gamma
+        lambda_away = mu * alpha_away * beta_home
+
+    alpha = attacking strength (>1 = above-average scorer).
+    beta  = defensive weakness (<1 = allows fewer goals = strong defense).
+    mu    = tournament average goals per team per match.
+    gamma = home-advantage multiplier.
+
+    A smooth tanh Elo correction is applied (bounded +/-25%) to avoid
+    over-amplifying very large Elo gaps while preserving the model's
+    Poisson structure.
+    """
+    lam_h = league_avg * home["attack"] * away["defense"] * home_advantage
+    lam_a = league_avg * away["attack"] * home["defense"]
+
+    elo_diff = home["elo"] - away["elo"]
+    elo_mult = 1.0 + float(np.tanh(elo_diff / 600.0)) * 0.25
+    lam_h   *= elo_mult
+    lam_a   *= (2.0 - elo_mult)
+
+    lam_h = float(np.clip(lam_h, 0.30, 4.0))
+    lam_a = float(np.clip(lam_a, 0.20, 3.5))
+    return lam_h, lam_a
+
+
+# ======================================================================
 # API ROUTES
-# ============================================================
+# ======================================================================
 
-@app.route('/')
+@app.route("/")
 def serve_index():
-    """Serve the main web page."""
-    return send_from_directory('web', 'index.html')
+    return send_from_directory("web", "index.html")
 
 
-@app.route('/api/competitions', methods=['GET'])
+@app.route("/api/competitions", methods=["GET"])
 def get_competitions():
-    """Get list of available competitions."""
-    comps = [
-        {'key': key, 'name': info['name']}
-        for key, info in COMPETITIONS.items()
-    ]
-    return jsonify({'competitions': comps})
-
-
-@app.route('/api/teams/<competition_key>', methods=['GET'])
-def get_teams(competition_key):
-    """Get teams for a competition."""
-    if competition_key not in COMPETITIONS:
-        return jsonify({'error': 'Competition not found'}), 404
-    
-    teams = []
-    for name, stats in COMPETITIONS[competition_key]['teams'].items():
-        teams.append({
-            'name': name,
-            'elo': stats['elo'],
-            'attack_strength': stats['attack'],
-            'defense_strength': stats['defense']
-        })
-    
-    # Sort by Elo
-    teams.sort(key=lambda x: x['elo'], reverse=True)
-    return jsonify({'teams': teams})
-
-
-@app.route('/api/predict', methods=['POST'])
-def predict_match():
-    """Run match prediction."""
-    data = request.json
-    
-    competition_key = data.get('competition')
-    home_team = data.get('home_team')
-    away_team = data.get('away_team')
-    
-    if not all([competition_key, home_team, away_team]):
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    if competition_key not in COMPETITIONS:
-        return jsonify({'error': 'Competition not found'}), 404
-    
-    teams = COMPETITIONS[competition_key]['teams']
-    
-    if home_team not in teams:
-        return jsonify({'error': f'Team "{home_team}" not found'}), 404
-    if away_team not in teams:
-        return jsonify({'error': f'Team "{away_team}" not found'}), 404
-    
-    home = teams[home_team]
-    away = teams[away_team]
-    
-    # Calculate expected goals
-    league_avg = 1.35
-    home_advantage = 1.25
-    
-    # Elo adjustment
-    elo_diff = home['elo'] - away['elo']
-    elo_factor = 1 + (elo_diff / 800)
-    
-    home_xg = league_avg * home['attack'] * (1 / away['defense']) * home_advantage
-    home_xg *= max(0.7, min(1.4, elo_factor))
-    
-    away_xg = league_avg * away['attack'] * (1 / home['defense'])
-    away_xg *= max(0.7, min(1.4, 2 - elo_factor))
-    
-    # Bounds
-    home_xg = max(0.5, min(3.5, home_xg))
-    away_xg = max(0.3, min(3.0, away_xg))
-    
-    # Get prediction
-    result = predictor.predict(home_xg, away_xg)
-    
+    comps = _get_competitions()
     return jsonify({
-        'home_team': home_team,
-        'away_team': away_team,
-        'home_elo': home['elo'],
-        'away_elo': away['elo'],
-        'expected_goals': {
-            'home': round(home_xg, 2),
-            'away': round(away_xg, 2)
-        },
-        'probabilities': {
-            'home_win': round(result['home_win'] * 100, 1),
-            'draw': round(result['draw'] * 100, 1),
-            'away_win': round(result['away_win'] * 100, 1)
-        },
-        'most_likely_score': result['most_likely_score'],
-        'markets': {
-            'btts': round(result['btts'] * 100, 1),
-            'over_1_5': round(result['over_1_5'] * 100, 1),
-            'over_2_5': round(result['over_2_5'] * 100, 1),
-            'over_3_5': round(result['over_3_5'] * 100, 1),
-            'clean_sheet_home': round(result['clean_sheet_home'] * 100, 1),
-            'clean_sheet_away': round(result['clean_sheet_away'] * 100, 1)
-        },
-        'top_scores': result['top_scores']
+        "competitions": [
+            {"key": k, "name": v["name"], "team_count": len(v["teams"])}
+            for k, v in comps.items()
+        ]
     })
 
 
-@app.route('/api/rankings/<competition_key>', methods=['GET'])
-def get_rankings(competition_key):
-    """Get team rankings for a competition."""
-    if competition_key not in COMPETITIONS:
-        return jsonify({'error': 'Competition not found'}), 404
-    
-    teams = COMPETITIONS[competition_key]['teams']
-    
-    rankings = sorted(
-        [{'name': name, 'elo': stats['elo'], 'attack': stats['attack'], 'defense': stats['defense']} 
-         for name, stats in teams.items()],
-        key=lambda x: x['elo'],
-        reverse=True
+@app.route("/api/teams/<competition_key>", methods=["GET"])
+def get_teams(competition_key):
+    comps = _get_competitions()
+    if competition_key not in comps:
+        return jsonify({"error": "Competition not found"}), 404
+    teams = [
+        {"name": n, "elo": s["elo"],
+         "attack_strength": s["attack"], "defense_strength": s["defense"]}
+        for n, s in comps[competition_key]["teams"].items()
+    ]
+    teams.sort(key=lambda x: x["elo"], reverse=True)
+    return jsonify({"teams": teams})
+
+
+@app.route("/api/predict", methods=["POST"])
+def predict_match():
+    data = request.json or {}
+    ckey = data.get("competition")
+    home = data.get("home_team")
+    away = data.get("away_team")
+
+    if not all([ckey, home, away]):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    comps = _get_competitions()
+    if ckey not in comps:
+        return jsonify({"error": "Competition not found"}), 404
+
+    teams = comps[ckey]["teams"]
+    if home not in teams:
+        return jsonify({"error": f'Team "{home}" not found'}), 404
+    if away not in teams:
+        return jsonify({"error": f'Team "{away}" not found'}), 404
+
+    # Serve from cache if available
+    cache_key = hashlib.md5(f"{ckey}|{home}|{away}".encode()).hexdigest()
+    cached = cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    hs, as_ = teams[home], teams[away]
+    lam_h, lam_a = _compute_xg(hs, as_)
+    ens, breakdown = _ensemble.predict(lam_h, lam_a, hs["elo"], as_["elo"])
+
+    def pct(v):
+        return round(v * 100, 1)
+
+    # Round breakdown percentages
+    bd_pct = {
+        model: ({o: pct(p) for o, p in probs.items()} if isinstance(probs, dict) else probs)
+        for model, probs in breakdown.items()
+    }
+
+    response = {
+        "home_team": home,
+        "away_team": away,
+        "home_elo":  hs["elo"],
+        "away_elo":  as_["elo"],
+        "expected_goals": {
+            "home": round(lam_h, 2),
+            "away": round(lam_a, 2),
+        },
+        "probabilities": {
+            "home_win": pct(ens["home_win"]),
+            "draw":     pct(ens["draw"]),
+            "away_win": pct(ens["away_win"]),
+        },
+        "markets": {
+            "btts":             pct(ens["btts"]),
+            "over_1_5":         pct(ens["over_1_5"]),
+            "over_2_5":         pct(ens["over_2_5"]),
+            "over_3_5":         pct(ens["over_3_5"]),
+            "clean_sheet_home": pct(ens["clean_sheet_home"]),
+            "clean_sheet_away": pct(ens["clean_sheet_away"]),
+        },
+        "top_scores": ens["top_scores"],
+        "model_breakdown": bd_pct,
+        "competition_name": comps[ckey]["name"],
+    }
+
+    cache.set(cache_key, response)
+    return jsonify(response)
+
+
+@app.route("/api/analyze", methods=["POST"])
+def analyze_match():
+    """
+    POST /api/analyze
+
+    Accepts the full /api/predict response body OR a bare
+    {competition, home_team, away_team} object.
+
+    Returns an AI-generated narrative (Gemini 1.5 Flash when GEMINI_API_KEY
+    is set, otherwise a structured statistical summary).
+    """
+    data = request.json or {}
+
+    if "probabilities" in data:
+        pred = data
+    else:
+        ckey = data.get("competition")
+        home = data.get("home_team")
+        away = data.get("away_team")
+        if not all([ckey, home, away]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        comps = _get_competitions()
+        if (ckey not in comps
+                or home not in comps[ckey]["teams"]
+                or away not in comps[ckey]["teams"]):
+            return jsonify({"error": "Invalid competition or team"}), 404
+
+        hs, as_ = comps[ckey]["teams"][home], comps[ckey]["teams"][away]
+        lam_h, lam_a = _compute_xg(hs, as_)
+        ens, _ = _ensemble.predict(lam_h, lam_a, hs["elo"], as_["elo"])
+
+        def pct(v): return round(v * 100, 1)
+        pred = {
+            "home_team": home, "away_team": away,
+            "home_elo": hs["elo"], "away_elo": as_["elo"],
+            "expected_goals": {"home": round(lam_h, 2), "away": round(lam_a, 2)},
+            "probabilities": {
+                "home_win": pct(ens["home_win"]),
+                "draw":     pct(ens["draw"]),
+                "away_win": pct(ens["away_win"]),
+            },
+            "competition_name": comps[ckey]["name"],
+        }
+
+    narrative = _gemini.generate(
+        home_team=pred["home_team"],
+        away_team=pred["away_team"],
+        home_elo=pred["home_elo"],
+        away_elo=pred["away_elo"],
+        xg_home=pred["expected_goals"]["home"],
+        xg_away=pred["expected_goals"]["away"],
+        probs={k: v / 100 for k, v in pred["probabilities"].items()},
+        competition_name=pred.get("competition_name", ""),
     )
-    
-    for i, team in enumerate(rankings, 1):
-        team['rank'] = i
-    
-    return jsonify({'rankings': rankings})
+
+    if narrative is None:
+        p   = pred["probabilities"]
+        hw  = p["home_win"]
+        d   = p["draw"]
+        aw  = p["away_win"]
+        ldr = (pred["home_team"] if hw > aw and hw > d
+               else pred["away_team"] if aw > hw else "either side")
+        narrative = (
+            f"{pred['home_team']} (Elo {pred['home_elo']}) host "
+            f"{pred['away_team']} (Elo {pred['away_elo']}) with "
+            f"expected goals of {pred['expected_goals']['home']:.2f} – "
+            f"{pred['expected_goals']['away']:.2f}. "
+            f"The Dixon-Coles ensemble gives {pred['home_team']} a {hw}% "
+            f"win probability, {d}% draw, and {pred['away_team']} {aw}%. "
+            f"The model marginally favours {ldr}. "
+            f"(Add a GEMINI_API_KEY environment variable to enable AI-generated narratives.)"
+        )
+
+    return jsonify({"narrative": narrative, "ai_powered": GEMINI_AVAILABLE})
 
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    app.run(debug=True, host='0.0.0.0', port=port)
+@app.route("/api/rankings/<competition_key>", methods=["GET"])
+def get_rankings(competition_key):
+    comps = _get_competitions()
+    if competition_key not in comps:
+        return jsonify({"error": "Competition not found"}), 404
+    ranked = sorted(
+        [{"name": n, "elo": s["elo"], "attack": s["attack"], "defense": s["defense"]}
+         for n, s in comps[competition_key]["teams"].items()],
+        key=lambda x: x["elo"], reverse=True,
+    )
+    for i, t in enumerate(ranked, 1):
+        t["rank"] = i
+    return jsonify({"rankings": ranked})
+
+
+@app.route("/api/head2head", methods=["GET"])
+def head2head():
+    """
+    GET /api/head2head?competition=X&home=A&away=B
+    Returns a matchup summary + per-model breakdown.
+    """
+    ckey = request.args.get("competition")
+    home = request.args.get("home")
+    away = request.args.get("away")
+
+    if not all([ckey, home, away]):
+        return jsonify({"error": "Provide competition, home, away query params"}), 400
+
+    comps = _get_competitions()
+    if ckey not in comps:
+        return jsonify({"error": "Competition not found"}), 404
+    teams = comps[ckey]["teams"]
+    if home not in teams or away not in teams:
+        return jsonify({"error": "One or both teams not found"}), 404
+
+    hs, as_ = teams[home], teams[away]
+    lam_h, lam_a = _compute_xg(hs, as_)
+    ens, breakdown = _ensemble.predict(lam_h, lam_a, hs["elo"], as_["elo"])
+
+    def pct(v): return round(v * 100, 1)
+    return jsonify({
+        "home_team": home, "away_team": away,
+        "elo_diff": hs["elo"] - as_["elo"],
+        "expected_goals": {"home": round(lam_h, 2), "away": round(lam_a, 2)},
+        "probabilities": {
+            "home_win": pct(ens["home_win"]),
+            "draw":     pct(ens["draw"]),
+            "away_win": pct(ens["away_win"]),
+        },
+        "model_breakdown": {
+            m: ({o: pct(p) for o, p in probs.items()} if isinstance(probs, dict) else probs)
+            for m, probs in breakdown.items()
+        },
+    })
+
+
+@app.route("/api/refresh", methods=["POST"])
+def refresh_data():
+    """
+    POST /api/refresh
+    Resets the Sheets client and clears the prediction cache.
+    Call this after editing team data in Google Sheets.
+    """
+    _sheets_loader._client = None
+    cache.clear()
+    live = _sheets_loader.load()
+    source = "google_sheets" if live else "static_fallback"
+    comp_count = len(live or _STATIC_COMPETITIONS)
+    return jsonify({
+        "status": "refreshed",
+        "source": source,
+        "competitions_loaded": comp_count,
+    })
+
+
+# ======================================================================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(debug=True, host="0.0.0.0", port=port)

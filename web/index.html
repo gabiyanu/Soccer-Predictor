@@ -3,471 +3,1065 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚽ Soccer Match Predictor</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Soccer Match Predictor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Bebas+Neue&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --primary: #10b981;
-            --primary-dark: #059669;
-            --secondary: #3b82f6;
-            --danger: #ef4444;
-            --dark: #1f2937;
-            --darker: #111827;
-            --light: #f3f4f6;
-            --gray: #6b7280;
-            --card-bg: #ffffff;
+            --green: #00e676;
+            --green-dim: #00c853;
+            --green-glow: rgba(0, 230, 118, 0.25);
+            --blue: #448aff;
+            --blue-dim: #2979ff;
+            --amber: #ffab40;
+            --red: #ff5252;
+            --bg-deep: #080c10;
+            --bg-mid: #0d1117;
+            --bg-card: rgba(255,255,255,0.04);
+            --bg-card-hover: rgba(255,255,255,0.07);
+            --border: rgba(255,255,255,0.08);
+            --border-bright: rgba(0, 230, 118, 0.35);
+            --text-primary: #f0f4f8;
+            --text-secondary: #8892a4;
+            --text-dim: #4a5568;
         }
+
+        html { scroll-behavior: smooth; }
 
         body {
             font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
             min-height: 100vh;
-            color: var(--dark);
+            overflow-x: hidden;
         }
 
-        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-
-        header {
-            text-align: center;
-            padding: 40px 20px;
-            color: white;
+        /* ─── ANIMATED BACKGROUND ORBS ─── */
+        .bg-orbs {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
         }
-        header h1 { font-size: 2.8rem; font-weight: 800; margin-bottom: 10px; }
-        header p { font-size: 1.1rem; opacity: 0.8; }
-        .badge {
-            display: inline-block;
-            background: var(--primary);
-            color: white;
-            padding: 5px 15px;
+        .bg-orbs::before {
+            content: '';
+            position: absolute;
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(0,230,118,0.07) 0%, transparent 70%);
+            top: -100px; left: -100px;
+            animation: driftA 20s ease-in-out infinite alternate;
+        }
+        .bg-orbs::after {
+            content: '';
+            position: absolute;
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(68,138,255,0.07) 0%, transparent 70%);
+            bottom: -100px; right: -100px;
+            animation: driftB 25s ease-in-out infinite alternate;
+        }
+        @keyframes driftA { to { transform: translate(150px, 200px); } }
+        @keyframes driftB { to { transform: translate(-150px, -100px); } }
+
+        /* ─── TOP NAV ─── */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            height: 64px;
+            background: rgba(8, 12, 16, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+        .topbar-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--green), var(--blue));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+        .logo-text {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.35rem;
+            letter-spacing: 1.5px;
+            color: var(--text-primary);
+        }
+        .topbar-badge {
+            background: linear-gradient(135deg, var(--green), var(--green-dim));
+            color: #000;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 10px;
             border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            margin-top: 15px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
 
+        /* ─── HERO ─── */
+        .hero {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: 64px 24px 48px;
+        }
+        .hero-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-bright);
+            color: var(--green);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 6px 16px;
+            border-radius: 20px;
+            margin-bottom: 22px;
+        }
+        .hero-eyebrow::before {
+            content: '';
+            width: 6px; height: 6px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.7); }
+        }
+        .hero h1 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(2.8rem, 6vw, 5rem);
+            letter-spacing: 3px;
+            line-height: 1;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #ffffff 30%, var(--green) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            max-width: 500px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* ─── DASHED PITCH DIVIDER ─── */
+        .pitch-divider {
+            position: relative;
+            z-index: 1;
+            height: 4px;
+            max-width: 900px;
+            margin: 0 auto 40px;
+            background: repeating-linear-gradient(
+                90deg,
+                var(--green) 0px, var(--green) 12px,
+                transparent 12px, transparent 20px
+            );
+            opacity: 0.25;
+            border-radius: 2px;
+        }
+
+        /* ─── MAIN CONTAINER ─── */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 0 20px 60px;
+        }
+
+        /* ─── GLASS CARDS ─── */
         .card {
-            background: var(--card-bg);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             border-radius: 20px;
             padding: 28px;
-            margin-bottom: 24px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
-
+        .card:hover {
+            border-color: rgba(255,255,255,0.13);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+        }
+        .card.accent-card {
+            border-color: var(--border-bright);
+            box-shadow: 0 0 0 1px rgba(0,230,118,0.08), 0 4px 24px rgba(0,230,118,0.06);
+        }
         .card-header {
             display: flex;
             align-items: center;
-            gap: 15px;
-            margin-bottom: 22px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid var(--light);
+            gap: 14px;
+            margin-bottom: 24px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
         }
-        .card-header .icon {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+        .card-icon {
+            width: 44px; height: 44px;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.4rem;
+            font-size: 1.2rem;
+            flex-shrink: 0;
         }
-        .card-header h2 { font-size: 1.3rem; font-weight: 700; }
-        .card-header p { font-size: 0.88rem; color: var(--gray); }
+        .card-icon.green  { background: linear-gradient(135deg, rgba(0,230,118,0.2), rgba(0,230,118,0.1));  border: 1px solid rgba(0,230,118,0.25); }
+        .card-icon.blue   { background: linear-gradient(135deg, rgba(68,138,255,0.2), rgba(68,138,255,0.1)); border: 1px solid rgba(68,138,255,0.25); }
+        .card-icon.amber  { background: linear-gradient(135deg, rgba(255,171,64,0.2), rgba(255,171,64,0.1));  border: 1px solid rgba(255,171,64,0.25); }
+        .card-icon.purple { background: linear-gradient(135deg, rgba(186,104,200,0.2), rgba(186,104,200,0.1)); border: 1px solid rgba(186,104,200,0.25); }
+        .card-header-text h2 { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+        .card-header-text p  { font-size: 0.82rem; color: var(--text-secondary); margin-top: 2px; }
 
-        .form-group { margin-bottom: 18px; }
-        label { display: block; font-weight: 600; margin-bottom: 8px; color: var(--dark); }
+        /* ─── FORM ELEMENTS ─── */
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
         select {
             width: 100%;
-            padding: 14px 18px;
-            border: 2px solid var(--light);
+            padding: 14px 44px 14px 18px;
+            background: rgba(255,255,255,0.05) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238892a4'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E") no-repeat right 14px center/18px;
+            border: 1px solid var(--border);
             border-radius: 12px;
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-family: inherit;
+            color: var(--text-primary);
             cursor: pointer;
             appearance: none;
-            background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E") no-repeat right 15px center/20px;
-            transition: border-color 0.3s, box-shadow 0.3s;
+            transition: border-color 0.25s, box-shadow 0.25s, background 0.25s;
         }
         select:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+            border-color: var(--green);
+            background-color: rgba(0, 230, 118, 0.04);
+            box-shadow: 0 0 0 3px var(--green-glow);
         }
+        select option { background: #1a1f2e; color: var(--text-primary); }
 
+        /* ─── TEAM PICKER GRID ─── */
         .team-grid {
             display: grid;
             grid-template-columns: 1fr auto 1fr;
-            gap: 25px;
+            gap: 20px;
             align-items: center;
-        }
-        .team-select { text-align: center; }
-        .team-select label {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--gray);
-        }
-        .vs-badge {
-            background: var(--darker);
-            color: white;
-            width: 55px;
-            height: 55px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 1.1rem;
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 16px 32px;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            width: 100%;
-            margin-top: 10px;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-        }
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
-        }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-        .results { display: none; }
-        .results.show { display: block; animation: fadeIn 0.5s ease; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .match-header {
-            text-align: center;
-            padding: 28px;
-            background: linear-gradient(135deg, var(--darker), var(--dark));
-            border-radius: 16px;
-            color: white;
             margin-bottom: 24px;
         }
-        .match-teams {
+        .team-slot {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+        .team-slot.home-slot { border-top: 2px solid var(--green); }
+        .team-slot.away-slot { border-top: 2px solid var(--blue); }
+        .team-slot label { font-size: 0.72rem; color: var(--text-dim); margin-bottom: 12px; }
+
+        .vs-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .vs-badge {
+            width: 52px; height: 52px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+            border: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 28px;
-            margin-bottom: 18px;
-            flex-wrap: wrap;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
         }
-        .team-name { font-size: 1.4rem; font-weight: 700; }
-        .team-elo { font-size: 0.88rem; opacity: 0.7; }
-        .xg-display { font-size: 2.4rem; font-weight: 800; color: var(--primary); }
-        .xg-label { font-size: 0.85rem; opacity: 0.7; margin-top: 5px; }
-        .prediction-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: white;
-            padding: 10px 24px;
-            border-radius: 25px;
-            font-weight: 700;
-            font-size: 1rem;
-            margin-top: 15px;
+        .vs-line { width: 1px; height: 20px; background: var(--border); }
+
+        /* ─── PREDICT BUTTON ─── */
+        .btn-predict {
+            width: 100%;
+            padding: 17px;
+            border: none;
+            border-radius: 14px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, var(--green), var(--green-dim));
+            color: #000;
+            box-shadow: 0 4px 20px var(--green-glow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-predict:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0,230,118,0.4);
+        }
+        .btn-predict:active { transform: translateY(0); }
+        .btn-predict:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-predict::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+        }
+        .btn-predict span { position: relative; z-index: 1; }
+
+        /* ─── LOADING SPINNER ─── */
+        .spinner-wrap {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 40px;
+            text-align: center;
+        }
+        .spinner-wrap.show { display: flex; }
+        .spinner {
+            width: 48px; height: 48px;
+            border: 3px solid rgba(0,230,118,0.15);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner-text { font-size: 0.85rem; color: var(--text-secondary); letter-spacing: 0.5px; }
+
+        /* ─── RESULTS REVEAL ─── */
+        .results { display: none; }
+        .results.show {
+            display: block;
+            animation: riseIn 0.5s cubic-bezier(0.22,1,0.36,1);
+        }
+        @keyframes riseIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
-        .prob-bar-container {
-            display: flex;
-            height: 48px;
-            border-radius: 24px;
+        /* ─── MATCH BANNER ─── */
+        .match-banner {
+            background: linear-gradient(135deg, rgba(0,230,118,0.08) 0%, rgba(68,138,255,0.08) 100%);
+            border: 1px solid var(--border-bright);
+            border-radius: 20px;
+            padding: 32px 28px;
+            margin-bottom: 20px;
+            text-align: center;
+            position: relative;
             overflow: hidden;
-            box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);
         }
-        .prob-bar {
+        .match-banner::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--green), var(--blue));
+        }
+        .match-venue {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 24px;
+        }
+        .match-teams-row {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 700;
-            color: white;
-            min-width: 55px;
-            transition: width 0.8s ease;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
         }
-        .prob-bar.home { background: linear-gradient(135deg, #10b981, #059669); }
-        .prob-bar.draw { background: linear-gradient(135deg, #6b7280, #4b5563); }
-        .prob-bar.away { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .team-block { flex: 1; min-width: 120px; max-width: 200px; }
+        .team-block.home { text-align: right; }
+        .team-block.away { text-align: left; }
+        .team-block-name {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.7rem;
+            letter-spacing: 1.5px;
+            line-height: 1.1;
+        }
+        .team-block.home .team-block-name { color: var(--green); }
+        .team-block.away .team-block-name { color: var(--blue); }
+        .team-block-elo { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
+        .xg-center { text-align: center; flex-shrink: 0; }
+        .xg-score {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2.6rem;
+            letter-spacing: 3px;
+            color: white;
+            line-height: 1;
+        }
+        .xg-sep { color: var(--text-dim); margin: 0 4px; }
+        .xg-label {
+            font-size: 0.7rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+        .prediction-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, rgba(255,171,64,0.15), rgba(255,171,64,0.08));
+            border: 1px solid rgba(255,171,64,0.35);
+            color: var(--amber);
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 8px 22px;
+            border-radius: 30px;
+            letter-spacing: 0.5px;
+            margin-top: 8px;
+        }
+
+        /* ─── PROBABILITY BAR ─── */
+        .prob-container {
+            display: flex;
+            height: 52px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            gap: 2px;
+            margin-bottom: 14px;
+        }
+        .prob-segment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+            transition: width 0.7s cubic-bezier(0.22,1,0.36,1);
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .prob-segment.home { background: linear-gradient(135deg, rgba(0,230,118,0.35), rgba(0,230,118,0.2)); color: var(--green); }
+        .prob-segment.draw { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
+        .prob-segment.away { background: linear-gradient(135deg, rgba(68,138,255,0.2), rgba(68,138,255,0.35)); color: var(--blue); }
         .prob-labels {
             display: flex;
             justify-content: space-between;
-            margin-top: 10px;
-            font-size: 0.88rem;
-            color: var(--gray);
+            font-size: 0.78rem;
+            color: var(--text-secondary);
         }
+        .prob-label-item { display: flex; align-items: center; gap: 6px; }
+        .prob-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .prob-dot.home { background: var(--green); }
+        .prob-dot.draw { background: var(--text-dim); }
+        .prob-dot.away { background: var(--blue); }
 
+        /* ─── STATS GRID ─── */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 14px;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 12px;
         }
-        .stat-card {
-            background: var(--light);
-            border-radius: 12px;
-            padding: 18px;
+        .stat-tile {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 12px;
             text-align: center;
+            transition: border-color 0.25s, transform 0.25s;
         }
-        .stat-value { font-size: 1.7rem; font-weight: 800; color: var(--primary); }
-        .stat-label { font-size: 0.82rem; color: var(--gray); margin-top: 4px; }
+        .stat-tile:hover { border-color: rgba(255,255,255,0.15); transform: translateY(-2px); }
+        .stat-value {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, var(--green), var(--blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+        .stat-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            line-height: 1.3;
+        }
 
-        .score-dist { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
-        .score-chip {
-            background: var(--light);
-            padding: 10px 15px;
-            border-radius: 8px;
+        /* ─── MODEL BREAKDOWN TABLE ─── */
+        .model-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .model-table th {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            padding: 0 0 12px;
+            text-align: right;
+        }
+        .model-table th:first-child { text-align: left; }
+        .model-table td {
+            padding: 10px 0;
+            border-top: 1px solid var(--border);
+            text-align: right;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+        .model-table td:first-child {
+            text-align: left;
+            color: var(--text-primary);
             font-weight: 600;
         }
-        .score-chip .score { color: var(--dark); }
-        .score-chip .prob { color: var(--primary); margin-left: 8px; }
-
-        .spinner {
-            display: none;
-            width: 40px;
-            height: 40px;
-            border: 4px solid var(--light);
-            border-top-color: var(--primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
+        .model-table tr.ensemble-row td {
+            color: var(--text-primary);
+            font-weight: 700;
+            border-top: 2px solid var(--border-bright);
         }
-        .spinner.show { display: block; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .model-table tr.ensemble-row td:first-child { color: var(--green); }
+        .model-badge {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            padding: 2px 7px;
+            border-radius: 6px;
+            margin-left: 6px;
+            vertical-align: middle;
+            background: rgba(255,255,255,0.07);
+            color: var(--text-dim);
+        }
+        .model-badge.dc   { background: rgba(0,230,118,0.12); color: var(--green); }
+        .model-badge.np   { background: rgba(68,138,255,0.12); color: var(--blue); }
+        .model-badge.elo  { background: rgba(255,171,64,0.12); color: var(--amber); }
 
-        footer {
-            text-align: center;
-            padding: 30px;
-            color: rgba(255,255,255,0.6);
+        /* ─── AI ANALYSIS CARD ─── */
+        .ai-btn {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid var(--border-bright);
+            border-radius: 12px;
+            background: rgba(0,230,118,0.06);
+            color: var(--green);
+            font-family: 'Inter', sans-serif;
             font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: background 0.25s, transform 0.2s;
         }
-        footer a { color: var(--primary); text-decoration: none; }
+        .ai-btn:hover {
+            background: rgba(0,230,118,0.12);
+            transform: translateY(-1px);
+        }
+        .ai-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .ai-narrative {
+            display: none;
+            margin-top: 18px;
+            padding: 18px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+        .ai-narrative.show { display: block; animation: riseIn 0.4s ease; }
+        .ai-powered-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--green);
+            margin-bottom: 10px;
+        }
+        .ai-powered-badge::before {
+            content: '';
+            width: 5px; height: 5px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
 
-        @media (max-width: 768px) {
-            header h1 { font-size: 2rem; }
+        /* ─── SCORE CHIPS ─── */
+        .score-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+        .score-chip {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 18px;
+            min-width: 80px;
+            transition: border-color 0.25s, background 0.25s;
+        }
+        .score-chip:nth-child(1) { border-color: rgba(0,230,118,0.3); background: rgba(0,230,118,0.07); }
+        .score-chip:nth-child(2) { border-color: rgba(68,138,255,0.25); background: rgba(68,138,255,0.05); }
+        .score-chip:hover { border-color: rgba(255,255,255,0.2); }
+        .score-chip .score {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            color: white;
+        }
+        .score-chip .prob { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+
+        /* ─── FOOTER ─── */
+        footer {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: 32px 20px;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 0.82rem;
+            letter-spacing: 0.5px;
+        }
+        footer strong { color: var(--green); }
+
+        /* ─── RESPONSIVE ─── */
+        @media (max-width: 600px) {
+            .topbar { padding: 0 16px; }
+            .hero { padding: 44px 16px 32px; }
             .team-grid { grid-template-columns: 1fr; gap: 12px; }
-            .vs-badge { width: 36px; height: 36px; font-size: 0.9rem; }
-            .match-teams { flex-direction: column; gap: 12px; }
-            .xg-display { font-size: 1.8rem; }
+            .vs-badge { display: none; }
+            .vs-line  { display: none; }
+            .match-teams-row { flex-direction: column; align-items: center; gap: 16px; }
+            .team-block.home, .team-block.away { text-align: center; }
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>⚽ Soccer Match Predictor</h1>
-        <p>Powered by Dixon-Coles statistical model</p>
-        <span class="badge">🚀 Fast Analytical Predictions</span>
-    </header>
 
-    <div class="container">
-        <div class="card">
-            <div class="card-header">
-                <div class="icon">🏆</div>
-                <div>
-                    <h2>Select Competition</h2>
-                    <p>Choose from available tournaments</p>
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="competition">Competition</label>
-                <select id="competition" onchange="loadTeams()">
-                    <option value="">-- Select a competition --</option>
-                </select>
+<div class="bg-orbs"></div>
+
+<!-- TOP NAV -->
+<nav class="topbar">
+    <a class="topbar-logo" href="#">
+        <div class="logo-icon">⚽</div>
+        <span class="logo-text">ScoutIQ</span>
+    </a>
+    <span class="topbar-badge">Live Predictor</span>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+    <div class="hero-eyebrow">Dixon-Coles Statistical Model</div>
+    <h1>Soccer Match Predictor</h1>
+    <p>Data-driven match outcome predictions powered by advanced Expected Goals modelling and Elo ratings.</p>
+</header>
+<div class="pitch-divider"></div>
+
+<div class="container">
+
+    <!-- COMPETITION CARD -->
+    <div class="card accent-card">
+        <div class="card-header">
+            <div class="card-icon green">🏆</div>
+            <div class="card-header-text">
+                <h2>Select Competition</h2>
+                <p>Choose from available tournaments</p>
             </div>
         </div>
-
-        <div class="card" id="team-card" style="display: none;">
-            <div class="card-header">
-                <div class="icon">👥</div>
-                <div>
-                    <h2>Select Teams</h2>
-                    <p>Choose home and away teams</p>
-                </div>
-            </div>
-            <div class="team-grid">
-                <div class="team-select">
-                    <label for="home-team">🏠 Home Team</label>
-                    <select id="home-team"><option value="">-- Select --</option></select>
-                </div>
-                <div class="vs-badge">VS</div>
-                <div class="team-select">
-                    <label for="away-team">✈️ Away Team</label>
-                    <select id="away-team"><option value="">-- Select --</option></select>
-                </div>
-            </div>
-            <button class="btn btn-primary" onclick="runPrediction()" id="predict-btn">
-                🎯 Predict Match Outcome
-            </button>
-        </div>
-
-        <div class="spinner" id="spinner"></div>
-
-        <div class="results" id="results">
-            <div class="card match-header">
-                <div class="match-teams">
-                    <div><div class="team-name" id="result-home-name">Home</div><div class="team-elo" id="result-home-elo">Elo: 1500</div></div>
-                    <div class="xg-display" id="result-xg">0.00 - 0.00</div>
-                    <div><div class="team-name" id="result-away-name">Away</div><div class="team-elo" id="result-away-elo">Elo: 1500</div></div>
-                </div>
-                <div class="xg-label">Expected Goals</div>
-                <div class="prediction-badge" id="prediction-badge">Prediction: TBD</div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon">📊</div>
-                    <div><h2>Match Outcome Probabilities</h2><p>Based on Dixon-Coles model</p></div>
-                </div>
-                <div class="prob-bar-container">
-                    <div class="prob-bar home" id="bar-home" style="width:33%;">33%</div>
-                    <div class="prob-bar draw" id="bar-draw" style="width:33%;">33%</div>
-                    <div class="prob-bar away" id="bar-away" style="width:34%;">34%</div>
-                </div>
-                <div class="prob-labels">
-                    <span>🏠 Home Win</span><span>🤝 Draw</span><span>✈️ Away Win</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon">💰</div>
-                    <div><h2>Betting Markets</h2><p>Key market probabilities</p></div>
-                </div>
-                <div class="stats-grid" id="markets-grid"></div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <div class="icon">🎯</div>
-                    <div><h2>Most Likely Scores</h2><p>Top predicted scorelines</p></div>
-                </div>
-                <div class="score-dist" id="score-dist"></div>
-            </div>
+        <div class="form-group">
+            <label for="competition">Tournament</label>
+            <select id="competition" onchange="loadTeams()">
+                <option value="">— Select a competition —</option>
+            </select>
         </div>
     </div>
 
-    <footer>
-        <p>Built with ❤️ using the Dixon-Coles statistical model</p>
-    </footer>
+    <!-- TEAMS CARD -->
+    <div class="card" id="team-card" style="display:none;">
+        <div class="card-header">
+            <div class="card-icon blue">👥</div>
+            <div class="card-header-text">
+                <h2>Select Teams</h2>
+                <p>Choose home and away sides</p>
+            </div>
+        </div>
+        <div class="team-grid">
+            <div class="team-slot home-slot">
+                <label>🏠 Home</label>
+                <select id="home-team"><option value="">— Select —</option></select>
+            </div>
+            <div class="vs-center">
+                <div class="vs-line"></div>
+                <div class="vs-badge">VS</div>
+                <div class="vs-line"></div>
+            </div>
+            <div class="team-slot away-slot">
+                <label>✈️ Away</label>
+                <select id="away-team"><option value="">— Select —</option></select>
+            </div>
+        </div>
+        <button class="btn-predict" onclick="runPrediction()" id="predict-btn">
+            <span>⚡ Run Prediction</span>
+        </button>
+    </div>
 
-    <script>
-        async function loadCompetitions() {
-            const res = await fetch('/api/competitions');
-            const data = await res.json();
-            const select = document.getElementById('competition');
-            data.competitions.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.key;
-                opt.textContent = c.name;
-                select.appendChild(opt);
-            });
+    <!-- LOADING -->
+    <div class="spinner-wrap" id="spinner">
+        <div class="spinner"></div>
+        <p class="spinner-text">Calculating probabilities…</p>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="results" id="results">
+
+        <!-- MATCH BANNER -->
+        <div class="match-banner">
+            <div class="match-venue">Match Analysis</div>
+            <div class="match-teams-row">
+                <div class="team-block home">
+                    <div class="team-block-name" id="result-home-name">Home</div>
+                    <div class="team-block-elo" id="result-home-elo">Elo: 1500</div>
+                </div>
+                <div class="xg-center">
+                    <div class="xg-score">
+                        <span id="xg-home">0.00</span>
+                        <span class="xg-sep">—</span>
+                        <span id="xg-away">0.00</span>
+                    </div>
+                    <div class="xg-label">Expected Goals (xG)</div>
+                </div>
+                <div class="team-block away">
+                    <div class="team-block-name" id="result-away-name">Away</div>
+                    <div class="team-block-elo" id="result-away-elo">Elo: 1500</div>
+                </div>
+            </div>
+            <div class="prediction-pill" id="prediction-badge">Prediction: TBD</div>
+        </div>
+
+        <!-- PROBABILITIES -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon green">📊</div>
+                <div class="card-header-text">
+                    <h2>Match Outcome Probabilities</h2>
+                    <p>Dixon-Coles model distribution</p>
+                </div>
+            </div>
+            <div class="prob-container">
+                <div class="prob-segment home" id="bar-home" style="width:33%;">33%</div>
+                <div class="prob-segment draw" id="bar-draw" style="width:33%;">33%</div>
+                <div class="prob-segment away" id="bar-away" style="width:34%;">34%</div>
+            </div>
+            <div class="prob-labels">
+                <div class="prob-label-item"><span class="prob-dot home"></span> Home Win</div>
+                <div class="prob-label-item"><span class="prob-dot draw"></span> Draw</div>
+                <div class="prob-label-item"><span class="prob-dot away"></span> Away Win</div>
+            </div>
+        </div>
+
+        <!-- BETTING MARKETS -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon amber">💰</div>
+                <div class="card-header-text">
+                    <h2>Betting Markets</h2>
+                    <p>Key probability thresholds</p>
+                </div>
+            </div>
+            <div class="stats-grid" id="markets-grid"></div>
+        </div>
+
+        <!-- SCORE DISTRIBUTION -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon purple">🎯</div>
+                <div class="card-header-text">
+                    <h2>Most Likely Scorelines</h2>
+                    <p>Top predicted final scores</p>
+                </div>
+            </div>
+            <div class="score-grid" id="score-dist"></div>
+        </div>
+
+        <!-- MODEL BREAKDOWN -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon blue">🔬</div>
+                <div class="card-header-text">
+                    <h2>Model Comparison</h2>
+                    <p>Per-model outcome probabilities</p>
+                </div>
+            </div>
+            <table class="model-table">
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th id="th-home">Home Win</th>
+                        <th>Draw</th>
+                        <th id="th-away">Away Win</th>
+                    </tr>
+                </thead>
+                <tbody id="model-tbody"></tbody>
+            </table>
+        </div>
+
+        <!-- AI ANALYSIS -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon green">✨</div>
+                <div class="card-header-text">
+                    <h2>AI Match Analysis</h2>
+                    <p>Powered by Google Gemini</p>
+                </div>
+            </div>
+            <button class="ai-btn" id="ai-btn" onclick="getAIAnalysis()">
+                ✨ Generate AI Match Analysis
+            </button>
+            <div class="ai-narrative" id="ai-narrative"></div>
+        </div>
+
+    </div><!-- /results -->
+</div>
+
+<footer>
+    Built with <strong>Dixon-Coles</strong> statistical modelling &amp; Elo ratings &nbsp;·&nbsp; ScoutIQ Analytics
+</footer>
+
+<script>
+    async function loadCompetitions() {
+        const res = await fetch('/api/competitions');
+        const data = await res.json();
+        const select = document.getElementById('competition');
+        data.competitions.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.key;
+            opt.textContent = c.name;
+            select.appendChild(opt);
+        });
+    }
+
+    async function loadTeams() {
+        const comp = document.getElementById('competition').value;
+        if (!comp) {
+            document.getElementById('team-card').style.display = 'none';
+            return;
         }
+        document.getElementById('spinner').classList.add('show');
+        document.getElementById('results').classList.remove('show');
 
-        async function loadTeams() {
-            const comp = document.getElementById('competition').value;
-            if (!comp) { document.getElementById('team-card').style.display = 'none'; return; }
+        const res = await fetch(`/api/teams/${comp}`);
+        const data = await res.json();
 
-            document.getElementById('spinner').classList.add('show');
-            document.getElementById('results').classList.remove('show');
+        const homeSelect = document.getElementById('home-team');
+        const awaySelect = document.getElementById('away-team');
+        homeSelect.innerHTML = '<option value="">— Select —</option>';
+        awaySelect.innerHTML = '<option value="">— Select —</option>';
 
-            const res = await fetch(`/api/teams/${comp}`);
-            const data = await res.json();
+        data.teams.forEach(t => {
+            const html = `<option value="${t.name}">${t.name} (Elo: ${t.elo})</option>`;
+            homeSelect.innerHTML += html;
+            awaySelect.innerHTML += html;
+        });
 
-            const homeSelect = document.getElementById('home-team');
-            const awaySelect = document.getElementById('away-team');
-            homeSelect.innerHTML = '<option value="">-- Select --</option>';
-            awaySelect.innerHTML = '<option value="">-- Select --</option>';
+        document.getElementById('team-card').style.display = 'block';
+        document.getElementById('spinner').classList.remove('show');
+    }
 
-            data.teams.forEach(t => {
-                homeSelect.innerHTML += `<option value="${t.name}">${t.name} (Elo: ${t.elo})</option>`;
-                awaySelect.innerHTML += `<option value="${t.name}">${t.name} (Elo: ${t.elo})</option>`;
-            });
+    async function runPrediction() {
+        const comp = document.getElementById('competition').value;
+        const home = document.getElementById('home-team').value;
+        const away = document.getElementById('away-team').value;
 
-            document.getElementById('team-card').style.display = 'block';
-            document.getElementById('spinner').classList.remove('show');
-        }
+        if (!home || !away) { alert('Please select both teams.'); return; }
+        if (home === away)  { alert('Please select different teams.'); return; }
 
-        async function runPrediction() {
-            const comp = document.getElementById('competition').value;
-            const home = document.getElementById('home-team').value;
-            const away = document.getElementById('away-team').value;
+        document.getElementById('predict-btn').disabled = true;
+        document.getElementById('spinner').classList.add('show');
+        document.getElementById('results').classList.remove('show');
 
-            if (!home || !away) { alert('Please select both teams'); return; }
-            if (home === away) { alert('Please select different teams'); return; }
+        const res = await fetch('/api/predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ competition: comp, home_team: home, away_team: away })
+        });
+        const data = await res.json();
 
-            document.getElementById('predict-btn').disabled = true;
-            document.getElementById('spinner').classList.add('show');
-            document.getElementById('results').classList.remove('show');
+        displayResults(data);
+        document.getElementById('predict-btn').disabled = false;
+        document.getElementById('spinner').classList.remove('show');
+    }
 
-            const res = await fetch('/api/predict', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ competition: comp, home_team: home, away_team: away })
-            });
-            const data = await res.json();
+    function displayResults(data) {
+        document.getElementById('result-home-name').textContent = data.home_team;
+        document.getElementById('result-away-name').textContent = data.away_team;
+        document.getElementById('result-home-elo').textContent  = `Elo: ${data.home_elo}`;
+        document.getElementById('result-away-elo').textContent  = `Elo: ${data.away_elo}`;
+        document.getElementById('xg-home').textContent = data.expected_goals.home;
+        document.getElementById('xg-away').textContent = data.expected_goals.away;
 
-            displayResults(data);
-            document.getElementById('predict-btn').disabled = false;
-            document.getElementById('spinner').classList.remove('show');
-        }
+        const p = data.probabilities;
+        let pred = 'Draw';
+        if (p.home_win > p.draw && p.home_win > p.away_win) pred = `${data.home_team} Win`;
+        else if (p.away_win > p.draw) pred = `${data.away_team} Win`;
+        const conf = Math.max(p.home_win, p.draw, p.away_win);
+        document.getElementById('prediction-badge').textContent =
+            `🎯  Prediction: ${pred}  ·  ${conf}% confidence`;
 
-        function displayResults(data) {
-            document.getElementById('result-home-name').textContent = data.home_team;
-            document.getElementById('result-away-name').textContent = data.away_team;
-            document.getElementById('result-home-elo').textContent = `Elo: ${data.home_elo}`;
-            document.getElementById('result-away-elo').textContent = `Elo: ${data.away_elo}`;
-            document.getElementById('result-xg').textContent = `${data.expected_goals.home} - ${data.expected_goals.away}`;
-
-            const p = data.probabilities;
-            let pred = 'Draw';
-            if (p.home_win > p.draw && p.home_win > p.away_win) pred = `${data.home_team} Win`;
-            else if (p.away_win > p.draw) pred = `${data.away_team} Win`;
-            const conf = Math.max(p.home_win, p.draw, p.away_win);
-            document.getElementById('prediction-badge').textContent = `🎯 Prediction: ${pred} (${conf}%)`;
-
+        // Animate bars after a brief delay
+        setTimeout(() => {
             document.getElementById('bar-home').style.width = `${p.home_win}%`;
             document.getElementById('bar-home').textContent = `${p.home_win}%`;
             document.getElementById('bar-draw').style.width = `${p.draw}%`;
             document.getElementById('bar-draw').textContent = `${p.draw}%`;
             document.getElementById('bar-away').style.width = `${p.away_win}%`;
             document.getElementById('bar-away').textContent = `${p.away_win}%`;
+        }, 120);
 
-            const m = data.markets;
-            document.getElementById('markets-grid').innerHTML = `
-                <div class="stat-card"><div class="stat-value">${m.btts}%</div><div class="stat-label">Both Teams Score</div></div>
-                <div class="stat-card"><div class="stat-value">${m.over_1_5}%</div><div class="stat-label">Over 1.5 Goals</div></div>
-                <div class="stat-card"><div class="stat-value">${m.over_2_5}%</div><div class="stat-label">Over 2.5 Goals</div></div>
-                <div class="stat-card"><div class="stat-value">${m.over_3_5}%</div><div class="stat-label">Over 3.5 Goals</div></div>
-                <div class="stat-card"><div class="stat-value">${m.clean_sheet_home}%</div><div class="stat-label">Home Clean Sheet</div></div>
-                <div class="stat-card"><div class="stat-value">${m.clean_sheet_away}%</div><div class="stat-label">Away Clean Sheet</div></div>
-            `;
+        const m = data.markets;
+        document.getElementById('markets-grid').innerHTML = `
+            <div class="stat-tile"><div class="stat-value">${m.btts}%</div><div class="stat-label">Both Teams Score</div></div>
+            <div class="stat-tile"><div class="stat-value">${m.over_1_5}%</div><div class="stat-label">Over 1.5 Goals</div></div>
+            <div class="stat-tile"><div class="stat-value">${m.over_2_5}%</div><div class="stat-label">Over 2.5 Goals</div></div>
+            <div class="stat-tile"><div class="stat-value">${m.over_3_5}%</div><div class="stat-label">Over 3.5 Goals</div></div>
+            <div class="stat-tile"><div class="stat-value">${m.clean_sheet_home}%</div><div class="stat-label">Home Clean Sheet</div></div>
+            <div class="stat-tile"><div class="stat-value">${m.clean_sheet_away}%</div><div class="stat-label">Away Clean Sheet</div></div>
+        `;
 
-            const scoreDist = document.getElementById('score-dist');
-            scoreDist.innerHTML = '';
-            Object.entries(data.top_scores).forEach(([score, prob]) => {
-                scoreDist.innerHTML += `<div class="score-chip"><span class="score">${score}</span><span class="prob">${(prob*100).toFixed(1)}%</span></div>`;
+        const scoreDist = document.getElementById('score-dist');
+        scoreDist.innerHTML = '';
+        Object.entries(data.top_scores).forEach(([score, prob]) => {
+            scoreDist.innerHTML += `
+                <div class="score-chip">
+                    <span class="score">${score}</span>
+                    <span class="prob">${(prob * 100).toFixed(1)}%</span>
+                </div>`;
+        });
+
+        // Update model breakdown table
+        if (data.model_breakdown) {
+            document.getElementById('th-home').textContent = data.home_team + ' Win';
+            document.getElementById('th-away').textContent = data.away_team + ' Win';
+            const bd = data.model_breakdown;
+            const rows = [
+                { key: 'dixon_coles',   label: 'Dixon-Coles',   badge: 'DC',  cls: 'dc'  },
+                { key: 'naive_poisson', label: 'Naive Poisson', badge: 'NP',  cls: 'np'  },
+                { key: 'elo',           label: 'Elo Rating',    badge: 'ELO', cls: 'elo' },
+            ];
+            let tbody = '';
+            rows.forEach(r => {
+                const d = bd[r.key];
+                if (!d) return;
+                tbody += `<tr>
+                    <td>${r.label} <span class="model-badge ${r.cls}">${r.badge}</span></td>
+                    <td>${d.home_win}%</td><td>${d.draw}%</td><td>${d.away_win}%</td>
+                </tr>`;
             });
-
-            document.getElementById('results').classList.add('show');
-            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+            const ens = bd.ensemble;
+            if (ens) {
+                tbody += `<tr class="ensemble-row">
+                    <td>Ensemble <span class="model-badge dc">45/30/25</span></td>
+                    <td>${ens.home_win}%</td><td>${ens.draw}%</td><td>${ens.away_win}%</td>
+                </tr>`;
+            }
+            document.getElementById('model-tbody').innerHTML = tbody;
         }
 
-        loadCompetitions();
-    </script>
+        // Reset AI analysis section
+        document.getElementById('ai-btn').disabled = false;
+        document.getElementById('ai-btn').textContent = '✨ Generate AI Match Analysis';
+        document.getElementById('ai-narrative').classList.remove('show');
+        document.getElementById('ai-narrative').innerHTML = '';
+
+        document.getElementById('results').classList.add('show');
+        document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Store last prediction for AI analysis reuse
+    let _lastPrediction = null;
+    const _origRunPrediction = runPrediction;
+    async function runPrediction() {
+        const comp = document.getElementById('competition').value;
+        const home = document.getElementById('home-team').value;
+        const away = document.getElementById('away-team').value;
+        if (!home || !away) { alert('Please select both teams.'); return; }
+        if (home === away)  { alert('Please select different teams.'); return; }
+
+        document.getElementById('predict-btn').disabled = true;
+        document.getElementById('spinner').classList.add('show');
+        document.getElementById('results').classList.remove('show');
+
+        const res  = await fetch('/api/predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ competition: comp, home_team: home, away_team: away })
+        });
+        const data = await res.json();
+        _lastPrediction = data;
+
+        displayResults(data);
+        document.getElementById('predict-btn').disabled = false;
+        document.getElementById('spinner').classList.remove('show');
+    }
+
+    async function getAIAnalysis() {
+        const btn = document.getElementById('ai-btn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Generating analysis…';
+
+        const payload = _lastPrediction || {
+            competition: document.getElementById('competition').value,
+            home_team:   document.getElementById('home-team').value,
+            away_team:   document.getElementById('away-team').value,
+        };
+
+        try {
+            const res  = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            const box  = document.getElementById('ai-narrative');
+            box.innerHTML = `
+                <div class="ai-powered-badge">
+                    ${data.ai_powered ? 'Gemini AI' : 'Statistical Summary'}
+                </div>
+                <p>${data.narrative}</p>`;
+            box.classList.add('show');
+            btn.textContent = '🔄 Regenerate Analysis';
+        } catch (e) {
+            btn.textContent = '⚠ Error — Try Again';
+        }
+        btn.disabled = false;
+    }
+
+    loadCompetitions();
+</script>
 </body>
 </html>
