@@ -854,6 +854,32 @@
 </footer>
 
 <script>
+    // ── Country flag emoji map ────────────────────────────────────────────────
+    const FLAG = {
+        'Albania': '🇦🇱', 'Algeria': '🇩🇿', 'Angola': '🇦🇴', 'Argentina': '🇦🇷',
+        'Australia': '🇦🇺', 'Austria': '🇦🇹', 'Belgium': '🇧🇪', 'Benin': '🇧🇯',
+        'Bolivia': '🇧🇴', 'Bosnia': '🇧🇦', 'Botswana': '🇧🇼', 'Brazil': '🇧🇷',
+        'Cameroon': '🇨🇲', 'Canada': '🇨🇦', 'Cape Verde': '🇨🇻', 'Chile': '🇨🇱',
+        'Colombia': '🇨🇴', 'Comoros': '🇰🇲', 'Costa Rica': '🇨🇷', 'Croatia': '🇭🇷',
+        'Czech Republic': '🇨🇿', 'DR Congo': '🇨🇩', 'Denmark': '🇩🇰',
+        'Ecuador': '🇪🇨', 'Egypt': '🇪🇬', 'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+        'Equatorial Guinea': '🇬🇶', 'France': '🇫🇷', 'Georgia': '🇬🇪',
+        'Germany': '🇩🇪', 'Ghana': '🇬🇭', 'Guinea': '🇬🇳', 'Hungary': '🇭🇺',
+        'Iran': '🇮🇷', 'Israel': '🇮🇱', 'Italy': '🇮🇹', 'Ivory Coast': '🇨🇮',
+        'Jamaica': '🇯🇲', 'Japan': '🇯🇵', 'Mali': '🇲🇱', 'Mexico': '🇲🇽',
+        'Morocco': '🇲🇦', 'Mozambique': '🇲🇿', 'Netherlands': '🇳🇱',
+        'Nigeria': '🇳🇬', 'Panama': '🇵🇦', 'Paraguay': '🇵🇾', 'Peru': '🇵🇪',
+        'Poland': '🇵🇱', 'Portugal': '🇵🇹', 'Qatar': '🇶🇦', 'Romania': '🇷🇴',
+        'Saudi Arabia': '🇸🇦', 'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳',
+        'Serbia': '🇷🇸', 'Slovakia': '🇸🇰', 'Slovenia': '🇸🇮',
+        'South Africa': '🇿🇦', 'South Korea': '🇰🇷', 'Spain': '🇪🇸',
+        'Sudan': '🇸🇩', 'Switzerland': '🇨🇭', 'Tanzania': '🇹🇿',
+        'Tunisia': '🇹🇳', 'Turkey': '🇹🇷', 'Ukraine': '🇺🇦', 'Uruguay': '🇺🇾',
+        'USA': '🇺🇸', 'Venezuela': '🇻🇪', 'Wales': '🏴󠁧󠁢󠁷󠁬󠁳󠁿', 'Zambia': '🇿🇲',
+        'Zimbabwe': '🇿🇼',
+    };
+    const flag = name => FLAG[name] ? FLAG[name] + ' ' : '';
+
     async function loadCompetitions(attempt = 1) {
         const select = document.getElementById('competition');
         select.innerHTML = '<option value="">⏳ Loading competitions…</option>';
@@ -903,7 +929,8 @@
         awaySelect.innerHTML = '<option value="">— Select —</option>';
 
         data.teams.forEach(t => {
-            const html = `<option value="${t.name}">${t.name} (Elo: ${t.elo})</option>`;
+            const label = `${flag(t.name)}${t.name} (Elo: ${t.elo})`;
+            const html = `<option value="${t.name}">${label}</option>`;
             homeSelect.innerHTML += html;
             awaySelect.innerHTML += html;
         });
@@ -937,8 +964,8 @@
     }
 
     function displayResults(data) {
-        document.getElementById('result-home-name').textContent = data.home_team;
-        document.getElementById('result-away-name').textContent = data.away_team;
+        document.getElementById('result-home-name').textContent = flag(data.home_team) + data.home_team;
+        document.getElementById('result-away-name').textContent = flag(data.away_team) + data.away_team;
         document.getElementById('result-home-elo').textContent  = `Elo: ${data.home_elo}`;
         document.getElementById('result-away-elo').textContent  = `Elo: ${data.away_elo}`;
         document.getElementById('xg-home').textContent = data.expected_goals.home;
