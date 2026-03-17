@@ -1,5 +1,7 @@
 # Firebase Cloud Functions runtime dependencies
-# Pinned to known-compatible versions for Python 3.11 Cloud Build
+# google-generativeai and gspread are intentionally omitted here —
+# predictor.py imports them inside try/except and degrades gracefully.
+# Add them back once the base deploy is confirmed working.
 
 # Firebase
 firebase-functions>=0.1.0
@@ -12,10 +14,3 @@ flask-cors>=4.0.0,<6.0.0
 # Numerical / statistical models
 numpy>=1.24.0,<3.0.0
 scipy>=1.10.0,<2.0.0
-
-# Google Gemini AI  (optional — set GEMINI_API_KEY env var to enable)
-google-generativeai>=0.7.0,<2.0.0
-
-# Google Sheets live data  (optional — set GOOGLE_SHEETS_ID + GOOGLE_SHEETS_JSON)
-gspread>=6.0.0,<7.0.0
-google-auth>=2.28.0,<3.0.0
