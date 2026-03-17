@@ -23,3 +23,14 @@ Thumbs.db
 *.log
 *.cache
 .env
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+functions/.env.local
+functions/__pycache__/
+functions/*.py[cod]
+service_account.json

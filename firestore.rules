@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Prediction cache — server-side (Admin SDK) only.
+    // No client-side reads or writes permitted.
+    match /predictions/{docId} {
+      allow read, write: if false;
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
