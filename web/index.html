@@ -854,16 +854,35 @@
 </footer>
 
 <script>
-    async function loadCompetitions() {
-        const res = await fetch('/api/competitions');
-        const data = await res.json();
+    async function loadCompetitions(attempt = 1) {
         const select = document.getElementById('competition');
-        data.competitions.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.key;
-            opt.textContent = c.name;
-            select.appendChild(opt);
-        });
+        select.innerHTML = '<option value="">⏳ Loading competitions…</option>';
+        select.disabled = true;
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 30000); // 30 s for cold start
+            const res = await fetch('/api/competitions', { signal: controller.signal });
+            clearTimeout(timeout);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            select.innerHTML = '<option value="">— Select a competition —</option>';
+            data.competitions.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.key;
+                opt.textContent = c.name;
+                select.appendChild(opt);
+            });
+            select.disabled = false;
+        } catch (err) {
+            if (attempt < 3) {
+                // Retry up to 3 times — handles Cloud Function cold-start delays
+                setTimeout(() => loadCompetitions(attempt + 1), 3000 * attempt);
+            } else {
+                select.innerHTML = '<option value="">⚠ Failed to load — refresh page</option>';
+                select.disabled = false;
+                console.error('loadCompetitions failed:', err);
+            }
+        }
     }
 
     async function loadTeams() {

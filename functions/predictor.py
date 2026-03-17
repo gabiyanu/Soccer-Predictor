@@ -492,12 +492,25 @@ _STATIC_COMPETITIONS = {
 # SINGLETONS + HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
-_sheets_loader = GoogleSheetsLoader()
-_gemini        = GeminiAnalyzer()
-_ensemble      = EnsemblePredictor()
+# Lazy singletons — created on first request to minimise cold-start time.
+# Importing predictor.py (numpy, scipy, etc.) already takes several seconds;
+# building the numpy goal grids inside EnsemblePredictor adds more. Deferring
+# until the first actual HTTP request keeps cold-start under ~5 s.
+_sheets_loader = None
+_gemini        = None
+_ensemble      = None
+
+
+def _get_singletons():
+    global _sheets_loader, _gemini, _ensemble
+    if _ensemble is None:
+        _sheets_loader = GoogleSheetsLoader()
+        _gemini        = GeminiAnalyzer()
+        _ensemble      = EnsemblePredictor()
 
 
 def _get_competitions():
+    _get_singletons()
     live = _sheets_loader.load()
     return live if live else _STATIC_COMPETITIONS
 
@@ -551,6 +564,7 @@ def get_teams(competition_key):
 
 @flask_app.route("/api/predict", methods=["POST"])
 def predict_match():
+    _get_singletons()
     data = request.json or {}
     ckey = data.get("competition")
     home = data.get("home_team")
@@ -608,6 +622,7 @@ def predict_match():
 
 @flask_app.route("/api/analyze", methods=["POST"])
 def analyze_match():
+    _get_singletons()
     data = request.json or {}
     if "probabilities" in data:
         pred = data
@@ -702,6 +717,7 @@ def head2head():
 
 @flask_app.route("/api/refresh", methods=["POST"])
 def refresh_data():
+    _get_singletons()
     _sheets_loader._client = None
     _cache_clear()
     live = _sheets_loader.load()
