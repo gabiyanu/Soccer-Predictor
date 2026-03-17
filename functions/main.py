@@ -26,6 +26,7 @@ def _get_flask_app():
     region="us-central1",
     memory=options.MemoryOption.MB_256,
     timeout_sec=60,
+    invoker="public",
 )
 def api(req: https_fn.Request) -> https_fn.Response:
     """
