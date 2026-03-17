@@ -42,13 +42,21 @@ import firebase_admin
 from firebase_admin import firestore as firebase_firestore
 from firebase_functions import https_fn, options
 
-if not firebase_admin._apps:
-    firebase_admin.initialize_app()
-
-_db = firebase_firestore.client()
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Lazy Firestore client — initialized on first request, not at import time.
+# This prevents the Firebase CLI source-analysis step from failing when ADC
+# credentials are not available on the developer's machine.
+_db = None
+
+def _get_db():
+    global _db
+    if _db is None:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        _db = firebase_firestore.client()
+    return _db
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -61,7 +69,7 @@ _CACHE_TTL  = 3600  # seconds
 def _cache_get(key: str):
     """Return cached prediction payload, or None if missing / expired."""
     try:
-        doc = _db.collection(_CACHE_COLL).document(key).get()
+        doc = _get_db().collection(_CACHE_COLL).document(key).get()
         if doc.exists:
             data = doc.to_dict()
             if data.get("expires_at", 0) > time.time():
@@ -74,7 +82,7 @@ def _cache_get(key: str):
 def _cache_set(key: str, payload: dict):
     """Store a prediction payload in Firestore with TTL."""
     try:
-        _db.collection(_CACHE_COLL).document(key).set({
+        _get_db().collection(_CACHE_COLL).document(key).set({
             "payload":    payload,
             "expires_at": time.time() + _CACHE_TTL,
             "created_at": time.time(),
@@ -86,7 +94,7 @@ def _cache_set(key: str, payload: dict):
 def _cache_clear():
     """Delete all cached predictions (used by /api/refresh)."""
     try:
-        docs = _db.collection(_CACHE_COLL).stream()
+        docs = _get_db().collection(_CACHE_COLL).stream()
         for doc in docs:
             doc.reference.delete()
     except Exception as exc:
