@@ -38,8 +38,10 @@
       "codebase": "default",
       "runtime": "python311",
       "ignore": [
+        "venv",
+        ".venv",
         "*.pyc",
-        "__pycache__",
+        "**/__pycache__/**",
         ".git",
         "firebase-debug.log",
         ".env.local"
