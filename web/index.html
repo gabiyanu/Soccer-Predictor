@@ -280,6 +280,14 @@
         .team-slot.home-slot { border-top: 2px solid var(--green); }
         .team-slot.away-slot { border-top: 2px solid var(--blue); }
         .team-slot label { font-size: 0.72rem; color: var(--text-dim); margin-bottom: 12px; }
+        .flag-select-wrap { display: flex; align-items: center; gap: 10px; }
+        .flag-select-wrap select { flex: 1; min-width: 0; }
+        .team-flag-img {
+            width: 36px; height: 24px; border-radius: 4px;
+            object-fit: cover; flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
 
         .vs-center {
             display: flex;
@@ -401,6 +409,12 @@
         .team-block { flex: 1; min-width: 120px; max-width: 200px; }
         .team-block.home { text-align: right; }
         .team-block.away { text-align: left; }
+        .result-flag {
+            width: 52px; height: 34px; border-radius: 6px; object-fit: cover;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.18);
+            margin-bottom: 8px;
+        }
         .team-block-name {
             font-family: 'Bebas Neue', sans-serif;
             font-size: 1.7rem;
@@ -714,7 +728,10 @@
         <div class="team-grid">
             <div class="team-slot home-slot">
                 <label>🏠 Home</label>
-                <select id="home-team"><option value="">— Select —</option></select>
+                <div class="flag-select-wrap">
+                    <img id="home-flag" class="team-flag-img" src="" alt="" style="display:none;">
+                    <select id="home-team" onchange="updateFlag('home')" ><option value="">— Select —</option></select>
+                </div>
             </div>
             <div class="vs-center">
                 <div class="vs-line"></div>
@@ -723,7 +740,10 @@
             </div>
             <div class="team-slot away-slot">
                 <label>✈️ Away</label>
-                <select id="away-team"><option value="">— Select —</option></select>
+                <div class="flag-select-wrap">
+                    <img id="away-flag" class="team-flag-img" src="" alt="" style="display:none;">
+                    <select id="away-team" onchange="updateFlag('away')"><option value="">— Select —</option></select>
+                </div>
             </div>
         </div>
         <button class="btn-predict" onclick="runPrediction()" id="predict-btn">
@@ -745,6 +765,7 @@
             <div class="match-venue">Match Analysis</div>
             <div class="match-teams-row">
                 <div class="team-block home">
+                    <img id="result-home-flag" class="result-flag" src="" alt="" style="display:none;">
                     <div class="team-block-name" id="result-home-name">Home</div>
                     <div class="team-block-elo" id="result-home-elo">Elo: 1500</div>
                 </div>
@@ -757,6 +778,7 @@
                     <div class="xg-label">Expected Goals (xG)</div>
                 </div>
                 <div class="team-block away">
+                    <img id="result-away-flag" class="result-flag" src="" alt="" style="display:none;">
                     <div class="team-block-name" id="result-away-name">Away</div>
                     <div class="team-block-elo" id="result-away-elo">Elo: 1500</div>
                 </div>
@@ -854,31 +876,36 @@
 </footer>
 
 <script>
-    // ── Country flag emoji map ────────────────────────────────────────────────
-    const FLAG = {
-        'Albania': '🇦🇱', 'Algeria': '🇩🇿', 'Angola': '🇦🇴', 'Argentina': '🇦🇷',
-        'Australia': '🇦🇺', 'Austria': '🇦🇹', 'Belgium': '🇧🇪', 'Benin': '🇧🇯',
-        'Bolivia': '🇧🇴', 'Bosnia': '🇧🇦', 'Botswana': '🇧🇼', 'Brazil': '🇧🇷',
-        'Cameroon': '🇨🇲', 'Canada': '🇨🇦', 'Cape Verde': '🇨🇻', 'Chile': '🇨🇱',
-        'Colombia': '🇨🇴', 'Comoros': '🇰🇲', 'Costa Rica': '🇨🇷', 'Croatia': '🇭🇷',
-        'Czech Republic': '🇨🇿', 'DR Congo': '🇨🇩', 'Denmark': '🇩🇰',
-        'Ecuador': '🇪🇨', 'Egypt': '🇪🇬', 'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-        'Equatorial Guinea': '🇬🇶', 'France': '🇫🇷', 'Georgia': '🇬🇪',
-        'Germany': '🇩🇪', 'Ghana': '🇬🇭', 'Guinea': '🇬🇳', 'Hungary': '🇭🇺',
-        'Iran': '🇮🇷', 'Israel': '🇮🇱', 'Italy': '🇮🇹', 'Ivory Coast': '🇨🇮',
-        'Jamaica': '🇯🇲', 'Japan': '🇯🇵', 'Mali': '🇲🇱', 'Mexico': '🇲🇽',
-        'Morocco': '🇲🇦', 'Mozambique': '🇲🇿', 'Netherlands': '🇳🇱',
-        'Nigeria': '🇳🇬', 'Panama': '🇵🇦', 'Paraguay': '🇵🇾', 'Peru': '🇵🇪',
-        'Poland': '🇵🇱', 'Portugal': '🇵🇹', 'Qatar': '🇶🇦', 'Romania': '🇷🇴',
-        'Saudi Arabia': '🇸🇦', 'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳',
-        'Serbia': '🇷🇸', 'Slovakia': '🇸🇰', 'Slovenia': '🇸🇮',
-        'South Africa': '🇿🇦', 'South Korea': '🇰🇷', 'Spain': '🇪🇸',
-        'Sudan': '🇸🇩', 'Switzerland': '🇨🇭', 'Tanzania': '🇹🇿',
-        'Tunisia': '🇹🇳', 'Turkey': '🇹🇷', 'Ukraine': '🇺🇦', 'Uruguay': '🇺🇾',
-        'USA': '🇺🇸', 'Venezuela': '🇻🇪', 'Wales': '🏴󠁧󠁢󠁷󠁬󠁳󠁿', 'Zambia': '🇿🇲',
-        'Zimbabwe': '🇿🇼',
+    // ── Country ISO-2 codes → flagcdn.com images ─────────────────────────────
+    const FLAG_ISO = {
+        'Albania':'al','Algeria':'dz','Angola':'ao','Argentina':'ar',
+        'Australia':'au','Austria':'at','Belgium':'be','Benin':'bj',
+        'Bolivia':'bo','Bosnia':'ba','Botswana':'bw','Brazil':'br',
+        'Cameroon':'cm','Canada':'ca','Cape Verde':'cv','Chile':'cl',
+        'Colombia':'co','Comoros':'km','Costa Rica':'cr','Croatia':'hr',
+        'Czech Republic':'cz','DR Congo':'cd','Denmark':'dk','Ecuador':'ec',
+        'Egypt':'eg','England':'gb-eng','Equatorial Guinea':'gq','France':'fr',
+        'Georgia':'ge','Germany':'de','Ghana':'gh','Guinea':'gn','Hungary':'hu',
+        'Iran':'ir','Israel':'il','Italy':'it','Ivory Coast':'ci','Jamaica':'jm',
+        'Japan':'jp','Mali':'ml','Mexico':'mx','Morocco':'ma','Mozambique':'mz',
+        'Netherlands':'nl','Nigeria':'ng','Panama':'pa','Paraguay':'py','Peru':'pe',
+        'Poland':'pl','Portugal':'pt','Qatar':'qa','Romania':'ro',
+        'Saudi Arabia':'sa','Scotland':'gb-sct','Senegal':'sn','Serbia':'rs',
+        'Slovakia':'sk','Slovenia':'si','South Africa':'za','South Korea':'kr',
+        'Spain':'es','Sudan':'sd','Switzerland':'ch','Tanzania':'tz',
+        'Tunisia':'tn','Turkey':'tr','Ukraine':'ua','Uruguay':'uy',
+        'USA':'us','Venezuela':'ve','Wales':'gb-wls','Zambia':'zm','Zimbabwe':'zw',
     };
-    const flag = name => FLAG[name] ? FLAG[name] + ' ' : '';
+    const flagUrl  = name => FLAG_ISO[name] ? `https://flagcdn.com/w40/${FLAG_ISO[name]}.png` : '';
+    const flag     = () => '';   // no longer used as prefix; kept so old calls are no-ops
+
+    function updateFlag(side) {
+        const sel  = document.getElementById(`${side}-team`);
+        const img  = document.getElementById(`${side}-flag`);
+        const url  = flagUrl(sel.value);
+        if (url) { img.src = url; img.alt = sel.value; img.style.display = 'inline'; }
+        else      { img.style.display = 'none'; }
+    }
 
     async function loadCompetitions(attempt = 1) {
         const select = document.getElementById('competition');
@@ -964,8 +991,15 @@
     }
 
     function displayResults(data) {
-        document.getElementById('result-home-name').textContent = flag(data.home_team) + data.home_team;
-        document.getElementById('result-away-name').textContent = flag(data.away_team) + data.away_team;
+        document.getElementById('result-home-name').textContent = data.home_team;
+        document.getElementById('result-away-name').textContent = data.away_team;
+        ['home','away'].forEach(side => {
+            const team = data[`${side}_team`];
+            const img  = document.getElementById(`result-${side}-flag`);
+            const url  = flagUrl(team);
+            if (url) { img.src = url; img.alt = team; img.style.display = 'inline'; }
+            else      { img.style.display = 'none'; }
+        });
         document.getElementById('result-home-elo').textContent  = `Elo: ${data.home_elo}`;
         document.getElementById('result-away-elo').textContent  = `Elo: ${data.away_elo}`;
         document.getElementById('xg-home').textContent = data.expected_goals.home;
