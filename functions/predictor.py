@@ -87,18 +87,27 @@ def _cache_clear():
 # ── Gemini ────────────────────────────────────────────────────────────────────
 GEMINI_AVAILABLE = False
 _gemini_model    = None
-try:
-    import google.generativeai as genai
-    _key = os.environ.get("GEMINI_API_KEY", "")
-    if _key:
-        genai.configure(api_key=_key)
-        _gemini_model    = genai.GenerativeModel("gemini-1.5-flash")
-        GEMINI_AVAILABLE = True
-        logger.info("Gemini: enabled")
-    else:
-        logger.info("Gemini: GEMINI_API_KEY not set")
-except ImportError:
-    logger.info("google-generativeai not installed")
+_gemini_init_done = False
+
+def _init_gemini():
+    """Lazily initialise Gemini so the env-var is read at first request,
+    not at module-import time (important for Cloud Functions cold starts).
+    Uses google-genai SDK (1.x) which supports current Gemini models."""
+    global GEMINI_AVAILABLE, _gemini_model, _gemini_init_done
+    if _gemini_init_done:
+        return
+    _gemini_init_done = True
+    try:
+        from google import genai as _genai
+        _key = os.environ.get("GEMINI_API_KEY", "")
+        if _key:
+            _gemini_model = _genai.Client(api_key=_key)
+            GEMINI_AVAILABLE = True
+            logger.info("Gemini: enabled (google-genai 1.x)")
+        else:
+            logger.info("Gemini: GEMINI_API_KEY not set — AI narratives disabled")
+    except ImportError:
+        logger.info("google-genai not installed")
 
 # ── Google Sheets ─────────────────────────────────────────────────────────────
 SHEETS_AVAILABLE = False
@@ -113,6 +122,7 @@ except ImportError:
 class GeminiAnalyzer:
     def generate(self, home_team, away_team, home_elo, away_elo,
                  xg_home, xg_away, probs, competition_name):
+        _init_gemini()          # ensure env-var is read before first use
         if not GEMINI_AVAILABLE or _gemini_model is None:
             return None
         try:
@@ -129,7 +139,10 @@ class GeminiAnalyzer:
                 f"(2) xG/Elo expectation, (3) prediction.\n"
                 f"Tone: punchy, analytical, no fluff. Plain text only."
             )
-            resp = _gemini_model.generate_content(prompt)
+            resp = _gemini_model.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
             return resp.text.strip()
         except Exception as exc:
             logger.warning("Gemini error: %s", exc)

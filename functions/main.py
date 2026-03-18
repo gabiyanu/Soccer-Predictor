@@ -24,7 +24,7 @@ def _get_flask_app():
 
 @https_fn.on_request(
     region="us-central1",
-    memory=options.MemoryOption.MB_256,
+    memory=options.MemoryOption.MB_512,
     timeout_sec=60,
     invoker="public",
 )

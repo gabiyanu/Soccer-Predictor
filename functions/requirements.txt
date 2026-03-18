@@ -13,14 +13,14 @@ numpy>=1.24.0,<3.0.0
 scipy>=1.10.0,<2.0.0
 
 # Google Gemini AI  (set GEMINI_API_KEY env var to enable)
-# Pinned <1.0.0 — the 1.x series was a breaking rewrite renamed to google-genai
-google-generativeai>=0.7.0,<1.0.0
+# google-genai is the current official SDK (replaces google-generativeai 0.x)
+google-genai>=1.0.0,<2.0.0
 
 # Google Sheets live data  (set GOOGLE_SHEETS_ID + GOOGLE_SHEETS_JSON to enable)
 gspread>=6.0.0,<7.0.0
 google-auth>=2.28.0,<3.0.0
 
 # Explicit pins to prevent version conflicts between firebase-admin and
-# google-generativeai (both pull in grpcio + protobuf transitively)
-protobuf>=4.21.0,<5.0.0
+# google-genai (both pull in grpcio + protobuf transitively)
+protobuf>=4.21.0,<6.0.0
 grpcio>=1.59.0,<2.0.0
